@@ -106,6 +106,42 @@ export type AgentMemory = {
   updated_at: string
 }
 
+// One row per brand+key pair in the brand_config table.
+// All values are stored as TEXT — callers cast to the appropriate type.
+export type BrandConfig = {
+  id: string
+  brand_id: string
+  key: string
+  value: string | null
+  updated_at: string
+}
+
+// Typed view of all brand_config rows for a single brand.
+// Built by loading all rows and indexing by key.
+export type BrandSettings = {
+  // Alert thresholds
+  min_roas: string
+  max_cac: string
+  spend_anomaly_pct: string
+  // Reporting schedule
+  report_day: string
+  report_time: string
+  report_timezone: string
+  alert_email: string
+  // COO channels
+  slack_channel: string
+  coo_channel_slack: string   // 'true' | 'false'
+  coo_channel_artifact: string // 'true' | 'false'
+  // Platform config (read-only in settings for now)
+  shopify_store: string
+  email_platform: string
+  shopify_markets: string
+  base_locale: string
+  cs_platform: string
+  refund_threshold_aud: string
+  b2b_daily_outreach_limit: string
+}
+
 export type AppEvent = {
   id: string
   brand_id: string

@@ -45,7 +45,7 @@ export async function middleware(request: NextRequest) {
 
 export const config = {
   matcher: [
-    // Skip static files and Next.js internals
-    '/((?!_next/static|_next/image|favicon.ico|.*\\.(?:svg|png|jpg|jpeg|gif|webp)$).*)',
+    // Skip static files, Next.js internals, and agent API routes (those use bearer-token auth)
+    '/((?!_next/static|_next/image|favicon.ico|api/agents|.*\\.(?:svg|png|jpg|jpeg|gif|webp)$).*)',
   ],
 }
