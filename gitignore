@@ -1,0 +1,41 @@
+# Environment & secrets
+.env
+.env.local
+.env.production
+.env.*.local
+
+# Dependencies
+node_modules/
+.pnp.*
+.yarn/
+
+# Build output
+.next/
+out/
+dist/
+build/
+
+# Vercel
+.vercel/
+
+# OS files
+.DS_Store
+Thumbs.db
+desktop.ini
+
+# IDE
+.vscode/
+.idea/
+*.swp
+*.swo
+
+# Logs
+*.log
+npm-debug.log*
+
+# n8n credentials (never commit)
+n8n-creds/
+*.credentials.json
+
+# Supabase local
+supabase/.temp/
