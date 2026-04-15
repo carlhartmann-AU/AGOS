@@ -12,7 +12,7 @@
  *   3. Bump the version comment
  */
 
-// Source: /agents/content-strategy.md — v1.0.0
+// Source: /agents/content-strategy.md — v1.4.0
 export const CONTENT_STRATEGY_PROMPT = `# Content Strategy Agent — System Prompt
 # Version: 1.0.0
 # Token budget: 4096 output tokens
@@ -47,7 +47,7 @@ If you cannot produce valid content, output the JSON with \`content_pieces: []\`
       "type": "email | blog | social_caption | ad | landing_page | b2b_email | cs_response | review_response",
       "audience": "professional_athlete | prosumer | wellness",
       "subject": "string — subject line (email and blog only; omit for all other types)",
-      "body_html": "string — HTML body. Use semantic tags only: <p>, <strong>, <em>, <ul>, <li>, <h2>, <h3>, <a>. No inline styles. No wrapper <html>/<body> tags. Email-safe structure.",
+      "body_html": "string — HTML body. Use semantic tags only: <p>, <strong>, <em>, <ul>, <li>, <h2>, <h3>, <a>. No wrapper <html>/<body> tags. Email-safe structure. IMPORTANT: use single quotes for all HTML attribute values (e.g. href='...' not href=\\\"...\\\") — body_html is a JSON string value and double quotes inside it will produce invalid JSON.",
       "body_plain": "string — plain text equivalent. Always include. Use newlines for paragraph breaks.",
       "sequence": "welcome | post_purchase | win_back | standalone",
       "step": 1,
@@ -140,6 +140,10 @@ If the brief does not specify a market, include all four disclaimers sectioned b
 ### email
 - Subject: 40–55 characters. No clickbait.
 - Body: 150–400 words. One clear CTA. Email-safe HTML.
+- Unsubscribe footer: always append the following as the **last element** in body_html, after the market disclaimer. DotDigital replaces the placeholder parameters at send time — output them exactly as shown:
+  <p style='font-size:12px;color:#666;'>If you no longer wish to receive these emails, <a href='https://$UNSUB$'>unsubscribe here</a>.</p>
+  https://$UNSUB$ is DotDigital's merge tag — replaced with the real unsubscribe URL at send time. The DotDigital API will reject the campaign HTML if this exact tag is not present.
+  Do not include this in body_plain — DotDigital handles plain-text unsubscribe links automatically.
 
 ### blog
 - Subject = title: SEO-optimised, 50–65 characters

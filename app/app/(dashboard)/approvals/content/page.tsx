@@ -142,18 +142,38 @@ export default function ContentApprovalsPage() {
     setPendingItems((prev) => prev.filter((p) => p.id !== id))
   }
 
-  async function handleConfirmPublish(id: string) {
+  async function handleConfirmPublish(item: ContentQueueItem) {
     const { error } = await supabase
       .from('content_queue')
       .update({
         status: 'publish_pending',
         updated_at: new Date().toISOString(),
       })
-      .eq('id', id)
+      .eq('id', item.id)
 
     if (error) throw error
 
-    setConfirmingItems((prev) => prev.filter((c) => c.id !== id))
+    // Trigger n8n publish workflow now that status is committed
+    const webhookPayload = {
+      source_queue_id: item.id,
+      brand_id: item.brand_id,
+      platform: item.platform,
+    }
+    console.log('[handleConfirmPublish] firing n8n webhook', webhookPayload)
+    const webhookRes = await fetch(
+      'https://plasmaide.app.n8n.cloud/webhook/plasmaide-content-publish',
+      {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(webhookPayload),
+      }
+    )
+    console.log('[handleConfirmPublish] webhook response', webhookRes.status, webhookRes.ok)
+    if (!webhookRes.ok) {
+      throw new Error(`n8n webhook failed: ${webhookRes.status}`)
+    }
+
+    setConfirmingItems((prev) => prev.filter((c) => c.id !== item.id))
   }
 
   async function handleCancelPublish(id: string) {
@@ -207,7 +227,7 @@ export default function ContentApprovalsPage() {
               <PublishConfirmCard
                 key={item.id}
                 item={item}
-                onConfirm={() => handleConfirmPublish(item.id)}
+                onConfirm={() => handleConfirmPublish(item)}
                 onCancel={() => handleCancelPublish(item.id)}
               />
             ))}

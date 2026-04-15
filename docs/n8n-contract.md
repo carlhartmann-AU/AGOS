@@ -49,6 +49,47 @@ On completion (success or final failure), n8n POSTs to Supabase:
 n8n also updates the source queue record status (e.g., `content_queue.status = 'published'`
 or `'failed'`).
 
+### `publish_pending` semantics
+
+**`publish_pending` means "create a draft on the platform, not send."**
+
+When the dashboard sets a content_queue item to `publish_pending` and fires the
+`plasmaide-content-publish` webhook, n8n creates an **unsent draft campaign** in
+DotDigital (or equivalent draft on other platforms). It does not trigger a send.
+
+**Manual send required (DotDigital):** Until the send-confirmation step is built
+(Phase 3+), campaigns must be manually sent inside the DotDigital UI after the
+draft is created. The `dd_campaign_id` returned by DotDigital is stored in the
+`content_published` event payload so the draft can be located.
+
+**Status flow:**
+```
+approved → publish_pending → published (draft created on platform)
+```
+A future `send_pending` status and corresponding n8n workflow will handle the
+send trigger once send-confirmation is implemented.
+
+### DotDigital campaign creation payload (`plasmaide-content-publish-v1`)
+
+Posted to `https://r3-api.dotdigital.com/v2/campaigns`:
+
+```json
+{
+  "name": "{brand_id} — {subject} — {queue_id_prefix}",
+  "subject": "string",
+  "fromName": "string (from n8n variable DD_FROM_NAME)",
+  "fromAddress": { "id": "number (from n8n variable DD_FROM_ADDRESS_ID)" },
+  "htmlContent": "string (body_html from content_queue)",
+  "plainTextContent": "string (body_plain from content_queue)",
+  "templateId": "number — OPTIONAL"
+}
+```
+
+**`templateId` / `dd_template_id`:** If `content.template_id` exists on the
+content_queue item, it is passed as `templateId` and DotDigital applies that
+template's layout around the HTML. If absent, DotDigital creates a basic
+freeform HTML campaign. This field is never required — omitting it is valid.
+
 ### n8n workflow naming convention
 
 `[brand_id]-[function]-[version]`

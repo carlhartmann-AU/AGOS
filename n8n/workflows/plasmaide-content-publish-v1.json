@@ -1,0 +1,202 @@
+{
+  "name": "plasmaide-content-publish-v1",
+  "active": false,
+  "nodes": [
+    {
+      "id": "a1b2c3d4-0001-4000-8000-000000000001",
+      "name": "Webhook — Publish Trigger",
+      "type": "n8n-nodes-base.webhook",
+      "typeVersion": 1.1,
+      "position": [240, 300],
+      "webhookId": "plasmaide-content-publish",
+      "parameters": {
+        "httpMethod": "POST",
+        "path": "plasmaide-content-publish",
+        "responseMode": "onReceived",
+        "options": {}
+      }
+    },
+    {
+      "id": "a1b2c3d4-0002-4000-8000-000000000002",
+      "name": "Fetch Queue Item",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [460, 300],
+      "parameters": {
+        "method": "GET",
+        "url": "={{ $vars.SUPABASE_URL }}/rest/v1/content_queue?id=eq.{{ $json.body.source_queue_id }}&select=*",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            {
+              "name": "apikey",
+              "value": "={{ $vars.SUPABASE_SERVICE_ROLE_KEY }}"
+            },
+            {
+              "name": "Authorization",
+              "value": "=Bearer {{ $vars.SUPABASE_SERVICE_ROLE_KEY }}"
+            }
+          ]
+        },
+        "options": {}
+      }
+    },
+    {
+      "id": "a1b2c3d4-0003-4000-8000-000000000003",
+      "name": "Build Campaign Body",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [680, 300],
+      "parameters": {
+        "jsCode": "// Pull the first (and only) row Supabase returns\nconst item = $input.first().json[0];\nif (!item) throw new Error('content_queue row not found for source_queue_id');\n\nconst content = item.content;\n\n// Build the DotDigital campaign creation payload\n// Reference: https://developer.dotdigital.com/reference/create-campaign\nconst campaignBody = {\n  name: `${item.brand_id} — ${content.subject || item.content_type} — ${item.id.slice(0, 8)}`,\n  subject: content.subject,\n  fromName: $vars.DD_FROM_NAME,\n  fromAddress: {\n    id: parseInt($vars.DD_FROM_ADDRESS_ID)\n  },\n  htmlContent: content.body_html,\n  plainTextContent: content.body_plain\n};\n\n// dd_template_id: include only if set on the queue item content.\n// When present, DotDigital applies the named template layout around the HTML.\n// When absent, DotDigital creates a basic freeform HTML campaign.\nif (content.template_id) {\n  campaignBody.templateId = content.template_id;\n}\n\nreturn [{ json: { campaignBody, queueItem: item } }];"
+      }
+    },
+    {
+      "id": "a1b2c3d4-0004-4000-8000-000000000004",
+      "name": "DD Create Campaign",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [900, 300],
+      "credentials": {
+        "httpBasicAuth": {
+          "id": "YOCMOmkElZtkJzkR",
+          "name": "DotDigital API"
+        }
+      },
+      "parameters": {
+        "method": "POST",
+        "url": "https://r3-api.dotdigital.com/v2/campaigns",
+        "authentication": "predefinedCredentialType",
+        "nodeCredentialType": "httpBasicAuth",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            {
+              "name": "Accept",
+              "value": "application/json"
+            }
+          ]
+        },
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={{ JSON.stringify({ ...$json.campaignBody, plainTextContent: $json.campaignBody.plainTextContent + '\\n\\nUnsubscribe: https://$UNSUB$' }) }}",
+        "options": {}
+      }
+    },
+    {
+      "id": "a1b2c3d4-0005-4000-8000-000000000005",
+      "name": "Mark Published",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [1120, 300],
+      "parameters": {
+        "method": "PATCH",
+        "url": "={{ $vars.SUPABASE_URL }}/rest/v1/content_queue?id=eq.{{ $('Build Campaign Body').item.json.queueItem.id }}",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            {
+              "name": "apikey",
+              "value": "={{ $vars.SUPABASE_SERVICE_ROLE_KEY }}"
+            },
+            {
+              "name": "Authorization",
+              "value": "=Bearer {{ $vars.SUPABASE_SERVICE_ROLE_KEY }}"
+            },
+            {
+              "name": "Prefer",
+              "value": "return=minimal"
+            }
+          ]
+        },
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={{ JSON.stringify({ status: 'published', published_at: new Date().toISOString(), updated_at: new Date().toISOString() }) }}",
+        "options": {}
+      }
+    },
+    {
+      "id": "a1b2c3d4-0006-4000-8000-000000000006",
+      "name": "Log Published Event",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [1340, 300],
+      "parameters": {
+        "method": "POST",
+        "url": "={{ $vars.SUPABASE_URL }}/rest/v1/events",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            {
+              "name": "apikey",
+              "value": "={{ $vars.SUPABASE_SERVICE_ROLE_KEY }}"
+            },
+            {
+              "name": "Authorization",
+              "value": "=Bearer {{ $vars.SUPABASE_SERVICE_ROLE_KEY }}"
+            },
+            {
+              "name": "Prefer",
+              "value": "return=minimal"
+            }
+          ]
+        },
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={{ JSON.stringify({ brand_id: $('Build Campaign Body').item.json.queueItem.brand_id, event_type: 'content_published', source: 'n8n', payload: { action: 'publish_content', platform: $('Build Campaign Body').item.json.queueItem.platform, status: 'success', source_queue_id: $('Build Campaign Body').item.json.queueItem.id, source_queue_table: 'content_queue', dd_campaign_id: $('DD Create Campaign').item.json.id } }) }}",
+        "options": {}
+      }
+    }
+  ],
+  "connections": {
+    "Webhook — Publish Trigger": {
+      "main": [
+        [
+          { "node": "Fetch Queue Item", "type": "main", "index": 0 }
+        ]
+      ]
+    },
+    "Fetch Queue Item": {
+      "main": [
+        [
+          { "node": "Build Campaign Body", "type": "main", "index": 0 }
+        ]
+      ]
+    },
+    "Build Campaign Body": {
+      "main": [
+        [
+          { "node": "DD Create Campaign", "type": "main", "index": 0 }
+        ]
+      ]
+    },
+    "DD Create Campaign": {
+      "main": [
+        [
+          { "node": "Mark Published", "type": "main", "index": 0 }
+        ]
+      ]
+    },
+    "Mark Published": {
+      "main": [
+        [
+          { "node": "Log Published Event", "type": "main", "index": 0 }
+        ]
+      ]
+    }
+  },
+  "settings": {
+    "executionOrder": "v1",
+    "saveManualExecutions": true,
+    "callerPolicy": "workflowsFromSameOwner",
+    "errorWorkflow": ""
+  },
+  "meta": {
+    "notes": "Receives publish trigger from AGOS dashboard. Fetches content_queue item from Supabase, creates an UNSENT DRAFT campaign in DotDigital, then marks the queue item as published and logs the event. Campaign must be manually sent in DotDigital until the send-confirmation step is built (Phase 3+). Required n8n variables: SUPABASE_URL, SUPABASE_SERVICE_ROLE_KEY, DD_FROM_NAME, DD_FROM_ADDRESS_ID."
+  },
+  "tags": [
+    { "name": "plasmaide" },
+    { "name": "content" },
+    { "name": "email" }
+  ]
+}

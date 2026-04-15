@@ -134,6 +134,13 @@ function validatePayload(body: unknown): { brand_id: string; brief: ContentBrief
   return { brand_id: b.brand_id as string, brief: brief as unknown as ContentBrief }
 }
 
+// ─── Helpers ──────────────────────────────────────────────────────────────────
+
+/** Strip markdown code fences that Claude sometimes wraps JSON in despite instructions. */
+function stripFences(text: string): string {
+  return text.replace(/^```(?:json)?\s*/i, '').replace(/\s*```\s*$/, '').trim()
+}
+
 // ─── Claude calls ─────────────────────────────────────────────────────────────
 
 async function callContentStrategy(
@@ -160,8 +167,15 @@ async function callContentStrategy(
   })
 
   const text = response.content[0].type === 'text' ? response.content[0].text : ''
-  const output = JSON.parse(text) as ContentStrategyOutput
-  return { output, usage: response.usage }
+  const stripped = stripFences(text)
+  try {
+    const output = JSON.parse(stripped) as ContentStrategyOutput
+    return { output, usage: response.usage }
+  } catch (parseErr) {
+    // Surface the raw response so we can see what Claude returned
+    const preview = stripped.slice(0, 500)
+    throw new Error(`JSON parse failed: ${(parseErr as Error).message} — raw preview: ${preview}`)
+  }
 }
 
 async function callCompliance(
@@ -187,7 +201,7 @@ async function callCompliance(
   })
 
   const text = response.content[0].type === 'text' ? response.content[0].text : ''
-  const output = JSON.parse(text) as ComplianceOutput
+  const output = JSON.parse(stripFences(text)) as ComplianceOutput
   return { output, usage: response.usage }
 }
 
