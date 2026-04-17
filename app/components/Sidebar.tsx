@@ -15,6 +15,7 @@ const NAV = [
     label: 'Approvals',
     children: [
       { href: '/approvals/content', label: 'Content' },
+      { href: '/approvals/web-designer', label: 'Web Designer' },
       { href: '/approvals/financial', label: 'Financial' },
     ],
   },
