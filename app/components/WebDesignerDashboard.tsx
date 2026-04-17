@@ -55,7 +55,7 @@ function ViolationList({ violations }: { violations: ComplianceViolation[] }) {
           <div className="grid grid-cols-2 gap-3">
             <div>
               <span className="block text-gray-400 mb-0.5">Original</span>
-              <span className="text-gray-700 italic">"{v.original}"</span>
+              <span className="text-gray-700 italic">&ldquo;{v.original}&rdquo;</span>
             </div>
             <div>
               <span className="block text-gray-400 mb-0.5">Suggested</span>
