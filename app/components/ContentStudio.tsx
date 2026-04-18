@@ -1,6 +1,6 @@
 'use client'
 
-import { useCallback, useRef, useState } from 'react'
+import { useRef, useState } from 'react'
 
 // ─── Types ────────────────────────────────────────────────────────────────────
 
@@ -229,14 +229,11 @@ function ImageUploadArea({
     onAdd(newImages)
   }
 
-  const onDrop = useCallback(
-    (e: React.DragEvent) => {
-      e.preventDefault()
-      setDragging(false)
-      if (!disabled) processFiles(e.dataTransfer.files)
-    },
-    [disabled]
-  )
+  function onDrop(e: React.DragEvent) {
+    e.preventDefault()
+    setDragging(false)
+    if (!disabled) processFiles(e.dataTransfer.files)
+  }
 
   return (
     <div className="space-y-2">

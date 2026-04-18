@@ -1,4 +1,4 @@
-// TypeScript types matching the Supabase schema (supabase/schema.sql)
+// TypeScript types matching the Supabase schema
 
 export type Brand = {
   brand_id: string
@@ -106,8 +106,6 @@ export type AgentMemory = {
   updated_at: string
 }
 
-// One row per brand+key pair in the brand_config table.
-// All values are stored as TEXT — callers cast to the appropriate type.
 export type BrandConfig = {
   id: string
   brand_id: string
@@ -116,23 +114,17 @@ export type BrandConfig = {
   updated_at: string
 }
 
-// Typed view of all brand_config rows for a single brand.
-// Built by loading all rows and indexing by key.
 export type BrandSettings = {
-  // Alert thresholds
   min_roas: string
   max_cac: string
   spend_anomaly_pct: string
-  // Reporting schedule
   report_day: string
   report_time: string
   report_timezone: string
   alert_email: string
-  // COO channels
   slack_channel: string
-  coo_channel_slack: string   // 'true' | 'false'
-  coo_channel_artifact: string // 'true' | 'false'
-  // Platform config (read-only in settings for now)
+  coo_channel_slack: string
+  coo_channel_artifact: string
   shopify_store: string
   email_platform: string
   shopify_markets: string
@@ -148,5 +140,62 @@ export type AppEvent = {
   event_type: string
   source: string
   payload: Record<string, unknown> | null
+  created_at: string
+}
+
+// ─── New: brand_settings table ────────────────────────────────────────────────
+
+export type Plan = 'starter' | 'growth' | 'scale' | 'enterprise'
+
+export type SubscriptionStatus = 'trialing' | 'active' | 'past_due' | 'canceled' | 'unpaid'
+
+export type ContentSchedule = {
+  enabled: boolean
+  frequency: 'daily' | 'weekdays' | 'weekly' | 'custom'
+  time: string
+  timezone: string
+  content_types: ContentType[]
+  topics_queue: string[]
+  auto_approve: boolean
+}
+
+export type IntegrationsConfig = {
+  shopify: { connected: boolean; store_url: string | null; blog_id: string | null }
+  dotdigital: { connected: boolean; endpoint: string | null }
+  gorgias: { connected: boolean }
+  triple_whale: { connected: boolean }
+  n8n_webhook_base: string | null
+}
+
+export type BrandSettingsRow = {
+  id: string
+  brand_id: string
+  content_schedule: ContentSchedule
+  llm_provider: string
+  llm_model: string
+  llm_api_key_encrypted: string | null
+  integrations: IntegrationsConfig
+  plan: Plan
+  stripe_customer_id: string | null
+  stripe_subscription_id: string | null
+  subscription_status: SubscriptionStatus
+  trial_ends_at: string | null
+  generations_this_month: number
+  generations_reset_at: string | null
+  created_at: string
+  updated_at: string
+}
+
+// ─── New: profiles table ──────────────────────────────────────────────────────
+
+export type UserRole = 'admin' | 'approver' | 'viewer'
+
+export type Profile = {
+  id: string
+  email: string
+  full_name: string | null
+  brand_id: string
+  role: UserRole
+  invited_by: string | null
   created_at: string
 }

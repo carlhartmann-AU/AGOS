@@ -2,7 +2,7 @@ import { redirect } from 'next/navigation'
 import { createClient } from '@/lib/supabase/server'
 import { BrandProvider } from '@/context/BrandContext'
 import { Sidebar } from '@/components/Sidebar'
-import type { Brand } from '@/types'
+import type { Brand, UserRole } from '@/types'
 
 export default async function DashboardLayout({
   children,
@@ -14,16 +14,14 @@ export default async function DashboardLayout({
 
   if (!user) redirect('/login')
 
-  // Fetch all brands, then filter to those the user has access to.
-  // brand_ids is a comma-separated string in user_metadata e.g. "plasmaide,folle"
-  // An empty brand_ids means access to all brands (admin).
-  const { data: allBrands } = await supabase
-    .from('brands')
-    .select('*')
-    .eq('status', 'active')
-    .order('name')
+  const [{ data: allBrands }, { data: profile }] = await Promise.all([
+    supabase.from('brands').select('*').eq('status', 'active').order('name'),
+    supabase.from('profiles').select('role').eq('id', user.id).single(),
+  ])
 
   const brands = allBrands as Brand[] ?? []
+  const role: UserRole = profile?.role ?? 'viewer'
+
   const rawBrandIds: string = user.user_metadata?.brand_ids ?? ''
   const allowedIds = rawBrandIds.split(',').map((s) => s.trim()).filter(Boolean)
 
@@ -35,7 +33,7 @@ export default async function DashboardLayout({
   return (
     <BrandProvider brands={accessibleBrands}>
       <div className="flex h-screen bg-gray-50">
-        <Sidebar user={user} />
+        <Sidebar user={user} role={role} />
         <main className="flex-1 overflow-y-auto px-8 py-6">
           {children}
         </main>
