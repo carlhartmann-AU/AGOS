@@ -8,7 +8,7 @@ const N8N_BASE = (
 const WEBHOOK_DRAFT   = `${N8N_BASE}web-designer-draft`
 const WEBHOOK_GO_LIVE = `${N8N_BASE}web-designer-go-live`
 
-type Action = 'draft' | 'go_live' | 'reject'
+type Action = 'draft' | 'go_live' | 'reject' | 'pull_back'
 
 function buildWebhookPayload(row: Record<string, unknown>, approvedBy: string | null | undefined) {
   const content = (row.content ?? {}) as Record<string, unknown>
@@ -89,7 +89,8 @@ export async function POST(request: NextRequest) {
     const { data: row, error } = await supabase
       .from('content_queue')
       .update({
-        status: 'publish_pending',
+        status: 'published',
+        published_at: new Date().toISOString(),
         updated_at: new Date().toISOString(),
       })
       .eq('id', content_queue_id)
@@ -133,6 +134,25 @@ export async function POST(request: NextRequest) {
     }
 
     return NextResponse.json({ ok: true, action: 'reject' })
+  }
+
+  if (action === 'pull_back') {
+    const { error } = await supabase
+      .from('content_queue')
+      .update({
+        status: 'pending',
+        approved_by: null,
+        approved_at: null,
+        updated_at: new Date().toISOString(),
+      })
+      .eq('id', content_queue_id)
+      .eq('brand_id', brand_id)
+
+    if (error) {
+      return NextResponse.json({ error: error.message }, { status: 500 })
+    }
+
+    return NextResponse.json({ ok: true, action: 'pull_back' })
   }
 
   return NextResponse.json({ error: `Unknown action: ${action}` }, { status: 400 })

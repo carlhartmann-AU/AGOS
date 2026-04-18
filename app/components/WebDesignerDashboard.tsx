@@ -158,13 +158,14 @@ function ExpandSection({
 
 type CardProps = {
   item: ContentQueueItem
-  stage: 'pending' | 'approved'
+  stage: 'pending' | 'approved' | 'publish_pending'
   onApproveDraft: () => Promise<void>
   onGoLive: () => Promise<void>
   onReject: () => Promise<void>
+  onPullBack?: () => Promise<void>
 }
 
-function WebDesignerCard({ item, stage, onApproveDraft, onGoLive, onReject }: CardProps) {
+function WebDesignerCard({ item, stage, onApproveDraft, onGoLive, onReject, onPullBack }: CardProps) {
   const [loading, setLoading] = useState<string | null>(null)
   const [error, setError] = useState<string | null>(null)
   const [openSection, setOpenSection] = useState<Section | null>(null)
@@ -210,6 +211,15 @@ function WebDesignerCard({ item, stage, onApproveDraft, onGoLive, onReject }: Ca
         <div className="px-5 py-2.5 bg-green-50 border-b border-green-200">
           <span className="text-green-700 text-xs font-medium">
             ✓ Draft created in Shopify — confirm go-live
+          </span>
+        </div>
+      )}
+
+      {/* Stage 3 header */}
+      {stage === 'publish_pending' && (
+        <div className="px-5 py-2.5 bg-blue-50 border-b border-blue-200">
+          <span className="text-blue-700 text-xs font-medium">
+            ⏳ Awaiting publish — approved by {item.approved_by ?? 'dashboard'}{item.approved_at ? `, ${relativeTime(item.approved_at)}` : ''}
           </span>
         </div>
       )}
@@ -327,6 +337,25 @@ function WebDesignerCard({ item, stage, onApproveDraft, onGoLive, onReject }: Ca
           >
             {loading === 'go_live' ? 'Going live…' : 'Go Live →'}
           </button>
+        )}
+
+        {stage === 'publish_pending' && (
+          <>
+            <button
+              onClick={() => act(onPullBack!, 'pull_back')}
+              disabled={!!loading}
+              className="px-3 py-1.5 text-xs font-medium text-gray-600 bg-white border border-gray-200 rounded hover:bg-gray-50 disabled:opacity-50 transition-colors"
+            >
+              {loading === 'pull_back' ? 'Pulling back…' : '← Pull Back'}
+            </button>
+            <button
+              onClick={() => act(onGoLive, 'go_live')}
+              disabled={!!loading}
+              className="px-3 py-1.5 text-xs font-medium text-white bg-blue-600 rounded hover:bg-blue-700 disabled:opacity-50 transition-colors"
+            >
+              {loading === 'go_live' ? 'Publishing…' : 'Go Live →'}
+            </button>
+          </>
         )}
       </div>
     </div>
@@ -450,7 +479,13 @@ export function WebDesignerDashboard() {
     setItems: setApprovedItems,
   } = useContentQueue(brandId, ['approved'], WEB_TYPES)
 
-  async function callApprove(queueId: string, action: 'draft' | 'go_live' | 'reject') {
+  const {
+    items: publishPendingItems,
+    loading: publishPendingLoading,
+    setItems: setPublishPendingItems,
+  } = useContentQueue(brandId, ['publish_pending'], WEB_TYPES)
+
+  async function callApprove(queueId: string, action: 'draft' | 'go_live' | 'reject' | 'pull_back') {
     if (!brandId) throw new Error('No active brand')
     const res = await fetch('/api/web-designer/approve', {
       method: 'POST',
@@ -472,6 +507,17 @@ export function WebDesignerDashboard() {
   async function handleGoLive(item: ContentQueueItem) {
     await callApprove(item.id, 'go_live')
     setApprovedItems((prev) => prev.filter((p) => p.id !== item.id))
+  }
+
+  async function handleGoLiveFromPublishPending(item: ContentQueueItem) {
+    await callApprove(item.id, 'go_live')
+    setPublishPendingItems((prev) => prev.filter((p) => p.id !== item.id))
+  }
+
+  async function handlePullBack(item: ContentQueueItem) {
+    await callApprove(item.id, 'pull_back')
+    setPublishPendingItems((prev) => prev.filter((p) => p.id !== item.id))
+    setPendingItems((prev) => [{ ...item, status: 'pending' }, ...prev])
   }
 
   async function handleRejectPending(item: ContentQueueItem) {
@@ -516,6 +562,37 @@ export function WebDesignerDashboard() {
                 onApproveDraft={() => handleApproveDraft(item)}
                 onGoLive={() => handleGoLive(item)}
                 onReject={() => handleRejectApproved(item)}
+              />
+            ))
+          )}
+        </section>
+      )}
+
+      {/* Stage 3 — Awaiting publish */}
+      {(publishPendingLoading || publishPendingItems.length > 0) && (
+        <section className="space-y-3">
+          <div className="flex items-center justify-between">
+            <h2 className="text-xs font-semibold text-gray-500 uppercase tracking-wide">
+              Awaiting Publish
+            </h2>
+            {!publishPendingLoading && (
+              <span className="text-xs bg-blue-100 text-blue-700 px-2 py-0.5 rounded-full font-medium">
+                {publishPendingItems.length}
+              </span>
+            )}
+          </div>
+          {publishPendingLoading ? (
+            <SkeletonCard />
+          ) : (
+            publishPendingItems.map((item) => (
+              <WebDesignerCard
+                key={item.id}
+                item={item}
+                stage="publish_pending"
+                onApproveDraft={() => handleApproveDraft(item)}
+                onGoLive={() => handleGoLiveFromPublishPending(item)}
+                onReject={() => handleRejectApproved(item)}
+                onPullBack={() => handlePullBack(item)}
               />
             ))
           )}
