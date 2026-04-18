@@ -23,6 +23,9 @@ build/
 Thumbs.db
 desktop.ini
 
+# Claude Code local config
+.claude/
+
 # IDE
 .vscode/
 .idea/
