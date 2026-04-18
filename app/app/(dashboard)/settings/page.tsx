@@ -332,15 +332,11 @@ export default function SettingsPage() {
       fn({ state: 'idle', error: null })
     }
 
-    const { data: authData } = await supabase.auth.getUser()
-
-    const [brandRes, configRes, settingsRes, profileRes] = await Promise.all([
+    const [brandRes, configRes, settingsRes, roleRes] = await Promise.all([
       supabase.from('brands').select('*').eq('brand_id', brandId).single(),
       supabase.from('brand_config').select('key, value').eq('brand_id', brandId),
       supabase.from('brand_settings').select('*').eq('brand_id', brandId).single(),
-      authData.user
-        ? supabase.from('profiles').select('role').eq('id', authData.user.id).single()
-        : null,
+      fetch('/api/user/role').then((r) => r.json() as Promise<{ role: string }>),
     ])
 
     if (brandRes.error) { setFetchError(`Failed to load brand: ${brandRes.error.message}`); setLoading(false); return }
@@ -372,7 +368,7 @@ export default function SettingsPage() {
       })
     }
 
-    setUserRole((profileRes?.data as { role?: UserRole } | null | undefined)?.role ?? 'viewer')
+    setUserRole((roleRes?.role as UserRole | undefined) ?? 'viewer')
     setLoading(false)
   }, [activeBrand?.brand_id]) // eslint-disable-line react-hooks/exhaustive-deps
 
