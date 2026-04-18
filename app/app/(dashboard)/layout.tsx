@@ -1,5 +1,6 @@
 import { redirect } from 'next/navigation'
 import { createClient } from '@/lib/supabase/server'
+import { createAdminClient } from '@/lib/supabase/admin'
 import { BrandProvider } from '@/context/BrandContext'
 import { Sidebar } from '@/components/Sidebar'
 import type { Brand, UserRole } from '@/types'
@@ -14,9 +15,12 @@ export default async function DashboardLayout({
 
   if (!user) redirect('/login')
 
+  // Use admin client for profile lookup — avoids recursive RLS on the profiles table
+  const admin = createAdminClient()
+
   const [{ data: allBrands }, { data: profile }] = await Promise.all([
     supabase.from('brands').select('*').eq('status', 'active').order('name'),
-    supabase.from('profiles').select('role').eq('id', user.id).single(),
+    admin.from('profiles').select('role').eq('id', user.id).single(),
   ])
 
   const brands = allBrands as Brand[] ?? []
