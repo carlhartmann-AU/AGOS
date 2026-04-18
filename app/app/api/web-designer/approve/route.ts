@@ -82,7 +82,18 @@ export async function POST(request: NextRequest) {
       )
     }
 
-    return NextResponse.json({ ok: true, action: 'draft' })
+    const webhookBody = await webhookRes.json().catch(() => ({})) as Record<string, unknown>
+    const shopifyId = webhookBody.shopify_id as string | undefined
+
+    if (shopifyId) {
+      const existingContent = (row.content ?? {}) as Record<string, unknown>
+      await supabase
+        .from('content_queue')
+        .update({ content: { ...existingContent, shopify_resource_id: shopifyId } })
+        .eq('id', content_queue_id)
+    }
+
+    return NextResponse.json({ ok: true, action: 'draft', shopify_id: shopifyId ?? null })
   }
 
   if (action === 'go_live') {
