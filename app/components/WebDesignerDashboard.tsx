@@ -1,6 +1,6 @@
 'use client'
 
-import { useEffect, useState } from 'react'
+import { useEffect, useRef, useState } from 'react'
 import { createClient } from '@/lib/supabase/client'
 import { useBrand } from '@/context/BrandContext'
 import { useContentQueue } from '@/lib/useContentQueue'
@@ -458,11 +458,115 @@ function SkeletonCard() {
   )
 }
 
+// ─── Generate Content Modal ───────────────────────────────────────────────────
+
+function GenerateModal({ onClose, onSuccess }: { onClose: () => void; onSuccess: () => void }) {
+  const [topic, setTopic] = useState('')
+  const [keywords, setKeywords] = useState('')
+  const [loading, setLoading] = useState(false)
+  const [error, setError] = useState<string | null>(null)
+  const topicRef = useRef<HTMLInputElement>(null)
+
+  useEffect(() => {
+    topicRef.current?.focus()
+  }, [])
+
+  async function handleSubmit(e: React.FormEvent) {
+    e.preventDefault()
+    if (!topic.trim()) return
+    setLoading(true)
+    setError(null)
+    try {
+      const target_keywords = keywords
+        .split(',')
+        .map((k) => k.trim())
+        .filter(Boolean)
+      const res = await fetch('/api/content/generate', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ topic: topic.trim(), target_keywords, content_type: 'blog' }),
+      })
+      const body = await res.json()
+      if (!res.ok) throw new Error(body.error ?? `Request failed: ${res.status}`)
+      onSuccess()
+      onClose()
+    } catch (e) {
+      setError(e instanceof Error ? e.message : 'Generation failed')
+      setLoading(false)
+    }
+  }
+
+  return (
+    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 p-4">
+      <div className="bg-white rounded-xl shadow-xl w-full max-w-md">
+        <div className="px-6 py-4 border-b border-gray-100 flex items-center justify-between">
+          <h2 className="text-sm font-semibold text-gray-900">Generate Content</h2>
+          <button
+            onClick={onClose}
+            disabled={loading}
+            className="text-gray-400 hover:text-gray-600 disabled:opacity-50"
+          >
+            ✕
+          </button>
+        </div>
+        <form onSubmit={handleSubmit} className="px-6 py-5 space-y-4">
+          <div>
+            <label className="block text-xs font-medium text-gray-700 mb-1.5">
+              Topic <span className="text-red-500">*</span>
+            </label>
+            <input
+              ref={topicRef}
+              type="text"
+              value={topic}
+              onChange={(e) => setTopic(e.target.value)}
+              disabled={loading}
+              placeholder="e.g. Pine Bark Extract and endurance training"
+              className="w-full px-3 py-2 text-sm border border-gray-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-gray-900 disabled:opacity-50"
+            />
+          </div>
+          <div>
+            <label className="block text-xs font-medium text-gray-700 mb-1.5">
+              Target keywords <span className="text-gray-400">(comma-separated)</span>
+            </label>
+            <input
+              type="text"
+              value={keywords}
+              onChange={(e) => setKeywords(e.target.value)}
+              disabled={loading}
+              placeholder="e.g. pine bark extract, nitric oxide, endurance"
+              className="w-full px-3 py-2 text-sm border border-gray-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-gray-900 disabled:opacity-50"
+            />
+          </div>
+          {error && <p className="text-xs text-red-600">{error}</p>}
+          <div className="flex justify-end gap-2 pt-1">
+            <button
+              type="button"
+              onClick={onClose}
+              disabled={loading}
+              className="px-4 py-2 text-sm font-medium text-gray-600 bg-white border border-gray-200 rounded-lg hover:bg-gray-50 disabled:opacity-50"
+            >
+              Cancel
+            </button>
+            <button
+              type="submit"
+              disabled={loading || !topic.trim()}
+              className="px-4 py-2 text-sm font-medium text-white bg-gray-900 rounded-lg hover:bg-gray-700 disabled:opacity-50 transition-colors"
+            >
+              {loading ? 'Generating…' : 'Generate'}
+            </button>
+          </div>
+        </form>
+      </div>
+    </div>
+  )
+}
+
 // ─── Main Dashboard ───────────────────────────────────────────────────────────
 
 export function WebDesignerDashboard() {
   const { activeBrand } = useBrand()
   const brandId = activeBrand?.brand_id ?? null
+  const [showGenerateModal, setShowGenerateModal] = useState(false)
 
   const WEB_TYPES: ContentType[] = ['landing_page', 'blog']
 
@@ -540,6 +644,13 @@ export function WebDesignerDashboard() {
 
   return (
     <div className="space-y-8">
+      {showGenerateModal && (
+        <GenerateModal
+          onClose={() => setShowGenerateModal(false)}
+          onSuccess={() => {}}
+        />
+      )}
+
       {/* Stage 2 — Approved, awaiting go-live */}
       {(approvedLoading || approvedItems.length > 0) && (
         <section className="space-y-3">
@@ -602,12 +713,20 @@ export function WebDesignerDashboard() {
       {/* Stage 1 — Pending review */}
       <section className="space-y-3">
         <div className="flex items-center justify-between">
-          <h2 className="text-xs font-semibold text-gray-500 uppercase tracking-wide">
-            Pending Review
-          </h2>
-          <span className="text-xs bg-gray-100 text-gray-500 px-2 py-0.5 rounded-full">
-            {pendingLoading ? '…' : pendingItems.length}
-          </span>
+          <div className="flex items-center gap-2">
+            <h2 className="text-xs font-semibold text-gray-500 uppercase tracking-wide">
+              Pending Review
+            </h2>
+            <span className="text-xs bg-gray-100 text-gray-500 px-2 py-0.5 rounded-full">
+              {pendingLoading ? '…' : pendingItems.length}
+            </span>
+          </div>
+          <button
+            onClick={() => setShowGenerateModal(true)}
+            className="text-xs font-medium text-white bg-gray-900 px-3 py-1.5 rounded-lg hover:bg-gray-700 transition-colors"
+          >
+            + Generate Content
+          </button>
         </div>
 
         {pendingError && (

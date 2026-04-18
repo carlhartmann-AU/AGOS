@@ -12,6 +12,10 @@ const NAV = [
     label: 'Dashboard',
   },
   {
+    href: '/content-studio',
+    label: 'Content Studio',
+  },
+  {
     label: 'Approvals',
     children: [
       { href: '/approvals/content', label: 'Content' },
