@@ -87,6 +87,7 @@ type IntegForm = {
   dotdigital_endpoint: string
   n8n_webhook_base: string
   triple_whale_api_key: string
+  triple_whale_shop_domain: string
 }
 
 // ─── Primitive UI helpers ─────────────────────────────────────────────────────
@@ -302,7 +303,7 @@ export default function SettingsPage() {
   const [aiTestResult, setAiTestResult] = useState<'ok' | 'fail' | null>(null)
 
   // Integrations
-  const [integForm, setIntegForm] = useState<IntegForm>({ shopify_store_url: '', shopify_blog_id: '', shopify_access_token: '', dotdigital_endpoint: '', n8n_webhook_base: '', triple_whale_api_key: '' })
+  const [integForm, setIntegForm] = useState<IntegForm>({ shopify_store_url: '', shopify_blog_id: '', shopify_access_token: '', dotdigital_endpoint: '', n8n_webhook_base: '', triple_whale_api_key: '', triple_whale_shop_domain: '' })
   const [twTestState, setTwTestState] = useState<'idle' | 'testing' | 'ok' | 'fail'>('idle')
   const [integSave, setIntegSave] = useState<SectionSave>({ state: 'idle', error: null })
 
@@ -371,6 +372,7 @@ export default function SettingsPage() {
         dotdigital_endpoint: (integ?.dotdigital?.endpoint as string | null) ?? '',
         n8n_webhook_base: (integ?.n8n_webhook_base as string | null) ?? '',
         triple_whale_api_key: '',  // never prefill tokens
+        triple_whale_shop_domain: (twInteg?.shop_domain as string | null) ?? '',
       })
       setTwTestState(twInteg?.api_key ? 'ok' : 'idle')
     }
@@ -496,6 +498,7 @@ export default function SettingsPage() {
         triple_whale: {
           connected: twTestState === 'ok',
           api_key: integForm.triple_whale_api_key.trim() || (existingTw?.api_key ?? null),
+          shop_domain: integForm.triple_whale_shop_domain.trim() || (existingTw?.shop_domain as string | null) || 'plasmaide-uk.myshopify.com',
         },
         n8n_webhook_base: integForm.n8n_webhook_base || null,
       }
@@ -907,6 +910,15 @@ export default function SettingsPage() {
                     value={integForm.triple_whale_api_key}
                     onChange={(v) => { setIntegForm((f) => ({ ...f, triple_whale_api_key: v })); setTwTestState('idle') }}
                     placeholder={(brandSettings?.integrations as unknown as Record<string, Record<string, string | null>> | null)?.triple_whale?.api_key ? '••••••••••••••••' : 'tw_…'}
+                    disabled={isReadOnly}
+                  />
+                </div>
+                <div>
+                  <Label>Shop domain</Label>
+                  <TextInput
+                    value={integForm.triple_whale_shop_domain}
+                    onChange={(v) => setIntegForm((f) => ({ ...f, triple_whale_shop_domain: v }))}
+                    placeholder="plasmaide-uk.myshopify.com"
                     disabled={isReadOnly}
                   />
                 </div>

@@ -9,7 +9,7 @@ export async function POST(request: NextRequest) {
 
   const { brand_id, api_key } = await request.json().catch(() => ({})) as { brand_id?: string; api_key?: string }
 
-  // If no key passed in body, try reading from brand_settings
+  // Use passed key or fall back to stored key
   let key = api_key?.trim()
   if (!key && brand_id) {
     const admin = createAdminClient()
@@ -22,20 +22,11 @@ export async function POST(request: NextRequest) {
     key = integ?.triple_whale?.api_key ?? undefined
   }
 
-  if (!key) return NextResponse.json({ error: 'No API key configured' }, { status: 400 })
+  if (!key) return NextResponse.json({ ok: false, error: 'No API key provided' }, { status: 400 })
 
-  // Triple Whale summary endpoint
-  const res = await fetch('https://api.triplewhale.com/api/v2/tw-metrics/get-metrics-by-day', {
-    method: 'POST',
-    headers: {
-      'Content-Type': 'application/json',
-      'x-api-key': key,
-    },
-    body: JSON.stringify({
-      shopUrl: brand_id === 'plasmaide' ? 'plasmaide.myshopify.com' : '',
-      start: new Date(Date.now() - 86400000).toISOString().split('T')[0],
-      end: new Date().toISOString().split('T')[0],
-    }),
+  const res = await fetch('https://api.triplewhale.com/api/v2/users/api-keys/me', {
+    method: 'GET',
+    headers: { 'x-api-key': key },
   })
 
   if (res.status === 401 || res.status === 403) {
@@ -45,5 +36,6 @@ export async function POST(request: NextRequest) {
     return NextResponse.json({ ok: false, error: `Triple Whale API error: ${res.status}` })
   }
 
-  return NextResponse.json({ ok: true })
+  const data = await res.json().catch(() => ({})) as { name?: string; email?: string }
+  return NextResponse.json({ ok: true, name: data.name, email: data.email })
 }
