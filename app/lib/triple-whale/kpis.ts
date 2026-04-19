@@ -1,26 +1,26 @@
 // lib/triple-whale/kpis.ts
-// Read path: aggregate cached daily rows into KPIs for the requested window.
-// No Triple Whale API calls here — pure cache reads.
+// Read path: aggregate cached daily rows into KPIs + convert to display currency.
 
 import type { SupabaseClient } from '@supabase/supabase-js'
+import { convertAmount } from './fx'
 
 export type WindowKey = '24h' | '7d' | '30d' | 'mtd'
 
 export interface KPIResult {
   window: WindowKey
-  range: { start: string; end: string } // YYYY-MM-DD, inclusive
+  range: { start: string; end: string }
+  display_currency: string
   revenue: number
   orders: number
   aov: number
   new_customers: number
   returning_customers: number
-  // Trend series for sparklines — one entry per day in range
   daily: Array<{
     date: string
     revenue: number
     orders: number
+    source_currency: string
   }>
-  // Freshness metadata
   last_synced_at: string | null
   days_cached: number
   days_expected: number
@@ -28,16 +28,13 @@ export interface KPIResult {
 
 /**
  * Resolve a window key to a [start, end] date range.
- * All dates in UTC YYYY-MM-DD format.
  */
 export function resolveWindow(window: WindowKey, now = new Date()): { start: string; end: string; expectedDays: number } {
   const end = toYMD(now)
 
   switch (window) {
-    case '24h': {
-      // Just today
+    case '24h':
       return { start: end, end, expectedDays: 1 }
-    }
     case '7d': {
       const start = toYMD(daysAgo(now, 6))
       return { start, end, expectedDays: 7 }
@@ -66,20 +63,22 @@ function daysAgo(from: Date, n: number): Date {
 }
 
 /**
- * Get KPIs for a brand + window, reading from tw_daily_summary cache.
- * Returns instantly (single indexed query + in-memory aggregation).
+ * Get KPIs for a brand + window, converting to the requested display currency.
+ *
+ * Historical integrity: each day's revenue is converted using THAT day's FX rate,
+ * not today's rate. Preserves the actual GBP→AUD value at time of sale.
  */
 export async function getKPIs(
   supabase: SupabaseClient,
   brandId: string,
-  window: WindowKey
+  window: WindowKey,
+  displayCurrency: string
 ): Promise<KPIResult> {
   const { start, end, expectedDays } = resolveWindow(window)
 
-  // Fetch rows in range
   const { data: rows, error } = await supabase
     .from('tw_daily_summary')
-    .select('date, revenue, orders, aov, new_customers, returning_customers')
+    .select('date, revenue, orders, aov, new_customers, returning_customers, source_currency, fx_rates')
     .eq('brand_id', brandId)
     .gte('date', start)
     .lte('date', end)
@@ -87,20 +86,27 @@ export async function getKPIs(
 
   if (error) throw new Error(`Failed to read cache: ${error.message}`)
 
-  const daily = (rows ?? []).map(r => ({
-    date: r.date,
-    revenue: Number(r.revenue ?? 0),
-    orders: Number(r.orders ?? 0),
-  }))
+  // Convert each day's revenue to display currency using that day's FX rate
+  const daily = (rows ?? []).map(r => {
+    const sourceCurrency = r.source_currency ?? 'GBP'
+    const rates = (r.fx_rates ?? {}) as Record<string, number>
+    const convertedRevenue = convertAmount(Number(r.revenue ?? 0), sourceCurrency, displayCurrency, rates)
+    return {
+      date: r.date,
+      revenue: convertedRevenue,
+      orders: Number(r.orders ?? 0),
+      source_currency: sourceCurrency,
+    }
+  })
 
-  // Aggregate over the window
+  // Aggregate
   const revenue = daily.reduce((s, r) => s + r.revenue, 0)
   const orders = daily.reduce((s, r) => s + r.orders, 0)
   const aov = orders > 0 ? revenue / orders : 0
   const new_customers = (rows ?? []).reduce((s, r) => s + Number(r.new_customers ?? 0), 0)
   const returning_customers = (rows ?? []).reduce((s, r) => s + Number(r.returning_customers ?? 0), 0)
 
-  // Read latest sync timestamp from helper view
+  // Latest sync timestamp
   const { data: syncRow } = await supabase
     .from('tw_latest_sync')
     .select('completed_at, started_at, status')
@@ -110,6 +116,7 @@ export async function getKPIs(
   return {
     window,
     range: { start, end },
+    display_currency: displayCurrency,
     revenue,
     orders,
     aov,

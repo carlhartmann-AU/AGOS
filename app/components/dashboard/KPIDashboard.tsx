@@ -6,7 +6,11 @@ import type { KPIResult, WindowKey } from '@/lib/triple-whale/kpis'
 
 interface Props {
   brandId: string
+  /** Optional: initial currency override. Falls back to brand_settings.display_currency. */
+  initialCurrency?: string
 }
+
+type Currency = 'AUD' | 'USD' | 'GBP' | 'EUR'
 
 const WINDOW_OPTIONS: Array<{ key: WindowKey; label: string }> = [
   { key: '24h', label: '24 hours' },
@@ -15,40 +19,81 @@ const WINDOW_OPTIONS: Array<{ key: WindowKey; label: string }> = [
   { key: 'mtd', label: 'Month to date' },
 ]
 
-export default function KPIDashboard({ brandId }: Props) {
-  const [window, setWindow] = useState<WindowKey>('24h')
+const CURRENCY_OPTIONS: Currency[] = ['AUD', 'USD', 'GBP', 'EUR']
+const CURRENCY_STORAGE_KEY = 'agos.dashboard.currency'
+
+// Safe localStorage helpers (SSR-safe; no-op server-side)
+function getSavedCurrency(): string | null {
+  if (typeof globalThis === 'undefined' || typeof (globalThis as typeof globalThis & { localStorage?: Storage }).localStorage === 'undefined') {
+    return null
+  }
+  try {
+    return globalThis.localStorage.getItem(CURRENCY_STORAGE_KEY)
+  } catch {
+    return null
+  }
+}
+
+function setSavedCurrency(value: string) {
+  if (typeof globalThis === 'undefined' || typeof (globalThis as typeof globalThis & { localStorage?: Storage }).localStorage === 'undefined') {
+    return
+  }
+  try {
+    globalThis.localStorage.setItem(CURRENCY_STORAGE_KEY, value)
+  } catch {
+    /* ignore quota/permission errors */
+  }
+}
+
+export default function KPIDashboard({ brandId, initialCurrency }: Props) {
+  const [selectedWindow, setSelectedWindow] = useState<WindowKey>('24h')
+  const [currency, setCurrency] = useState<Currency | undefined>(() => {
+    const saved = getSavedCurrency()
+    if (saved && CURRENCY_OPTIONS.includes(saved as Currency)) return saved as Currency
+    return initialCurrency as Currency | undefined
+  })
   const [kpis, setKpis] = useState<KPIResult | null>(null)
   const [loading, setLoading] = useState(true)
   const [refreshing, setRefreshing] = useState(false)
   const [error, setError] = useState<string | null>(null)
   const [, startTransition] = useTransition()
 
-  const fetchKPIs = useCallback(async (w: WindowKey) => {
-    const res = await fetch(`/api/kpis?brand_id=${brandId}&window=${w}`, { cache: 'no-store' })
+  const fetchKPIs = useCallback(async (w: WindowKey, c?: Currency) => {
+    const params = new URLSearchParams({ brand_id: brandId, window: w })
+    if (c) params.set('currency', c)
+    const res = await fetch(`/api/kpis?${params.toString()}`, { cache: 'no-store' })
     if (!res.ok) throw new Error(`KPI fetch failed: ${res.status}`)
     return (await res.json()) as KPIResult
   }, [brandId])
 
-  // Initial load + window change
+  // Initial load + on selectedWindow/currency change
   useEffect(() => {
     setLoading(true)
     setError(null)
-    fetchKPIs(window)
+    fetchKPIs(selectedWindow, currency)
       .then(data => {
         setKpis(data)
+        // If user hadn't picked a currency yet, lock in the brand default returned by the API
+        if (!currency && data.display_currency) {
+          setCurrency(data.display_currency as Currency)
+        }
         setLoading(false)
       })
       .catch(err => {
         setError(err.message)
         setLoading(false)
       })
-  }, [window, fetchKPIs])
+  }, [selectedWindow, currency, fetchKPIs])
+
+  const handleCurrencyChange = (c: Currency) => {
+    setCurrency(c)
+    setSavedCurrency(c)
+  }
 
   const handleRefresh = async () => {
     setRefreshing(true)
     setError(null)
     try {
-      // Trigger sync (fetches today's data from TW and writes to cache)
       const syncRes = await fetch('/api/triple-whale/sync', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
@@ -56,12 +101,11 @@ export default function KPIDashboard({ brandId }: Props) {
       })
 
       if (!syncRes.ok && syncRes.status !== 200) {
-        const err = await syncRes.json()
-        throw new Error(err.error ?? 'Sync failed')
+        const errBody = await syncRes.json()
+        throw new Error(errBody.error ?? 'Sync failed')
       }
 
-      // Re-read KPIs from cache
-      const fresh = await fetchKPIs(window)
+      const fresh = await fetchKPIs(selectedWindow, currency)
       startTransition(() => setKpis(fresh))
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Refresh failed')
@@ -73,25 +117,45 @@ export default function KPIDashboard({ brandId }: Props) {
   const lastSyncedLabel = formatLastSynced(kpis?.last_synced_at)
   const isStale = kpis?.last_synced_at ? hoursSince(kpis.last_synced_at) > 48 : false
   const hasPartialCache = kpis ? kpis.days_cached < kpis.days_expected : false
+  const displayCurrency = kpis?.display_currency ?? currency ?? 'USD'
 
   return (
     <div className="space-y-4">
-      {/* Controls row: window toggle + freshness + refresh */}
+      {/* Controls: selectedWindow toggle + currency toggle + freshness + refresh */}
       <div className="flex items-center justify-between flex-wrap gap-3">
-        <div className="inline-flex rounded-lg border border-gray-200 bg-white p-1">
-          {WINDOW_OPTIONS.map(opt => (
-            <button
-              key={opt.key}
-              onClick={() => setWindow(opt.key)}
-              className={`px-3 py-1.5 text-sm font-medium rounded-md transition ${
-                window === opt.key
-                  ? 'bg-gray-900 text-white'
-                  : 'text-gray-600 hover:text-gray-900'
-              }`}
-            >
-              {opt.label}
-            </button>
-          ))}
+        <div className="flex items-center gap-2 flex-wrap">
+          <div className="inline-flex rounded-lg border border-gray-200 bg-white p-1">
+            {WINDOW_OPTIONS.map(opt => (
+              <button
+                key={opt.key}
+                onClick={() => setSelectedWindow(opt.key)}
+                className={`px-3 py-1.5 text-sm font-medium rounded-md transition ${
+                  selectedWindow === opt.key
+                    ? 'bg-gray-900 text-white'
+                    : 'text-gray-600 hover:text-gray-900'
+                }`}
+              >
+                {opt.label}
+              </button>
+            ))}
+          </div>
+
+          <div className="inline-flex rounded-lg border border-gray-200 bg-white p-1">
+            {CURRENCY_OPTIONS.map(c => (
+              <button
+                key={c}
+                onClick={() => handleCurrencyChange(c)}
+                className={`px-2.5 py-1.5 text-sm font-medium rounded-md transition ${
+                  displayCurrency === c
+                    ? 'bg-gray-900 text-white'
+                    : 'text-gray-600 hover:text-gray-900'
+                }`}
+                title={`Display in ${c}`}
+              >
+                {c}
+              </button>
+            ))}
+          </div>
         </div>
 
         <div className="flex items-center gap-2">
@@ -112,35 +176,31 @@ export default function KPIDashboard({ brandId }: Props) {
         </div>
       </div>
 
-      {/* Stale warning banner */}
       {isStale && !refreshing && (
         <div className="rounded-lg bg-amber-50 border border-amber-200 px-3 py-2 text-sm text-amber-800">
           Data is over 48 hours old. Daily sync may have failed — try refreshing manually.
         </div>
       )}
 
-      {/* Partial cache warning (e.g. selected 30d but only have 5 days cached) */}
       {hasPartialCache && !isStale && (
         <div className="rounded-lg bg-blue-50 border border-blue-200 px-3 py-2 text-sm text-blue-800">
           Showing {kpis!.days_cached} of {kpis!.days_expected} days. Older data is being backfilled.
         </div>
       )}
 
-      {/* Error banner */}
       {error && (
         <div className="rounded-lg bg-red-50 border border-red-200 px-3 py-2 text-sm text-red-800">
           {error}
         </div>
       )}
 
-      {/* KPI tiles */}
       {loading && !kpis ? (
         <KPIGridSkeleton />
       ) : kpis ? (
         <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
-          <KPITile label="Revenue" value={formatCurrency(kpis.revenue)} />
+          <KPITile label="Revenue" value={formatCurrency(kpis.revenue, displayCurrency)} />
           <KPITile label="Orders" value={kpis.orders.toLocaleString()} />
-          <KPITile label="AOV" value={formatCurrency(kpis.aov)} />
+          <KPITile label="AOV" value={formatCurrency(kpis.aov, displayCurrency)} />
           <KPITile label="New Customers" value={kpis.new_customers.toLocaleString()} />
         </div>
       ) : null}
@@ -215,11 +275,18 @@ function RefreshIcon({ spinning }: { spinning: boolean }) {
 // Formatting helpers
 // ============================================================================
 
-function formatCurrency(n: number): string {
-  // TODO: pull currency from brand_settings; default GBP given Plasmaide-UK store
-  return new Intl.NumberFormat('en-GB', {
+const CURRENCY_LOCALES: Record<Currency, string> = {
+  AUD: 'en-AU',
+  USD: 'en-US',
+  GBP: 'en-GB',
+  EUR: 'en-IE', // en-IE reads naturally for EUR without forcing German/French conventions
+}
+
+function formatCurrency(n: number, currency: string): string {
+  const locale = CURRENCY_LOCALES[currency as Currency] ?? 'en-US'
+  return new Intl.NumberFormat(locale, {
     style: 'currency',
-    currency: 'GBP',
+    currency,
     maximumFractionDigits: 0,
   }).format(n)
 }

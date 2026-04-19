@@ -1,7 +1,7 @@
 // app/api/kpis/route.ts
-// GET /api/kpis?window=24h|7d|30d|mtd
+// GET /api/kpis?brand_id=X&window=24h|7d|30d|mtd&currency=AUD
 //
-// Fast cache read. No Triple Whale calls. Returns in ~50ms.
+// If currency is omitted, uses brand_settings.display_currency (or USD fallback).
 
 import { NextRequest, NextResponse } from 'next/server'
 import { createClient } from '@supabase/supabase-js'
@@ -10,6 +10,7 @@ import { getKPIs, type WindowKey } from '@/lib/triple-whale/kpis'
 export const dynamic = 'force-dynamic'
 
 const VALID_WINDOWS: WindowKey[] = ['24h', '7d', '30d', 'mtd']
+const SUPPORTED_CURRENCIES = ['AUD', 'USD', 'GBP', 'EUR']
 
 function admin() {
   return createClient(
@@ -24,6 +25,7 @@ export async function GET(req: NextRequest) {
     const { searchParams } = new URL(req.url)
     const window = (searchParams.get('window') ?? '24h') as WindowKey
     const brandId = searchParams.get('brand_id')
+    const requestedCurrency = searchParams.get('currency')?.toUpperCase()
 
     if (!VALID_WINDOWS.includes(window)) {
       return NextResponse.json(
@@ -36,9 +38,27 @@ export async function GET(req: NextRequest) {
       return NextResponse.json({ error: 'brand_id required' }, { status: 400 })
     }
 
-    const supabase = admin()
-    const kpis = await getKPIs(supabase, brandId, window)
+    if (requestedCurrency && !SUPPORTED_CURRENCIES.includes(requestedCurrency)) {
+      return NextResponse.json(
+        { error: `Unsupported currency. Supported: ${SUPPORTED_CURRENCIES.join(', ')}` },
+        { status: 400 }
+      )
+    }
 
+    const supabase = admin()
+
+    // Resolve display currency: query param > brand default > USD fallback
+    let displayCurrency = requestedCurrency
+    if (!displayCurrency) {
+      const { data: brand } = await supabase
+        .from('brand_settings')
+        .select('display_currency')
+        .eq('brand_id', brandId)
+        .maybeSingle()
+      displayCurrency = brand?.display_currency ?? 'USD'
+    }
+
+    const kpis = await getKPIs(supabase, brandId, window, displayCurrency ?? 'USD')
     return NextResponse.json(kpis)
   } catch (err) {
     console.error('KPI read error:', err)
