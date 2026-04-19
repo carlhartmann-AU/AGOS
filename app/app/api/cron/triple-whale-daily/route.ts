@@ -19,13 +19,13 @@ export async function GET(req: NextRequest) {
   // Fetch all brand_settings rows that have TW credentials
   const { data: allSettings, error } = await supabase
     .from('brand_settings')
-    .select('id, integrations')
+    .select('id, brand_id, integrations')
 
   if (error) {
     return NextResponse.json({ error: error.message }, { status: 500 })
   }
 
-  type Row = { id: string; integrations: unknown }
+  type Row = { id: string; brand_id: string; integrations: unknown }
   const configured = (allSettings as Row[] ?? []).filter(row => {
     const integ = row.integrations as Record<string, Record<string, string | null> | null> | null
     const tw = integ?.triple_whale as Record<string, string | null> | undefined
@@ -40,7 +40,7 @@ export async function GET(req: NextRequest) {
       const tw = integ.triple_whale as Record<string, string>
       return syncTripleWhale({
         supabase,
-        brandId: row.id,
+        brandId: row.brand_id,
         apiKey: tw.api_key,
         shopDomain: tw.shop_domain,
         triggeredBy: 'cron',

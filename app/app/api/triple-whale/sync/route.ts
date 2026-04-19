@@ -93,7 +93,7 @@ export async function POST(req: NextRequest) {
     }
 
     console.log('[tw-sync] invoking sync:', {
-      brandId: settings.id,
+      brandId: brand_id,
       shopDomain,
       apiKeyPrefix: apiKey.slice(0, 8) + '…',
       dates,
@@ -102,7 +102,7 @@ export async function POST(req: NextRequest) {
 
     const result = await syncTripleWhale({
       supabase,
-      brandId: settings.id,
+      brandId: brand_id,
       apiKey,
       shopDomain,
       triggeredBy: triggered_by,
