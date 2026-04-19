@@ -4,18 +4,10 @@ import { useEffect, useState } from 'react'
 import Link from 'next/link'
 import { useBrand } from '@/context/BrandContext'
 import { PageHeader } from '@/components/PageHeader'
+import KPIDashboard from '@/components/dashboard/KPIDashboard'
 import type { ContentQueueStatus } from '@/types'
 
 // ─── Types ────────────────────────────────────────────────────────────────────
-
-type TwMetrics = {
-  revenue7d: number | null
-  orders7d: number | null
-  aov: number | null
-  newCustomers: number | null
-  shopDomain: string
-  period: { start: string; end: string }
-}
 
 type ContentMetrics = {
   total: number
@@ -33,8 +25,6 @@ type QueueItem = {
 }
 
 type MetricsResponse = {
-  tw: TwMetrics | null
-  tw_no_key: boolean
   content: ContentMetrics
   recent: QueueItem[]
 }
@@ -51,13 +41,6 @@ const STATUS_STYLES: Partial<Record<ContentQueueStatus, string>> = {
   publish_pending:  'bg-purple-100 text-purple-700',
   published:        'bg-green-100 text-green-800',
   failed:           'bg-red-100 text-red-700',
-}
-
-function fmt(n: number | null, prefix = '', fallback = '—') {
-  if (n === null || n === undefined) return fallback
-  if (n >= 1_000_000) return `${prefix}${(n / 1_000_000).toFixed(2)}M`
-  if (n >= 1000) return `${prefix}${(n / 1000).toFixed(1)}k`
-  return `${prefix}${n.toLocaleString('en-AU', { minimumFractionDigits: n % 1 !== 0 ? 2 : 0, maximumFractionDigits: 2 })}`
 }
 
 function fmtInt(n: number | null) {
@@ -112,7 +95,6 @@ export default function DashboardPage() {
       .catch((e) => { setError(e.message); setLoading(false) })
   }, [brandId])
 
-  const tw = data?.tw
   const content = data?.content
   const recent = data?.recent ?? []
 
@@ -126,63 +108,10 @@ export default function DashboardPage() {
         </div>
       )}
 
-      {/* ── Row 1: Store Performance (Triple Whale) ───────────────────────── */}
+      {/* ── Row 1: Store Performance (Triple Whale — cache-first) ──────────── */}
       <div>
-        <SectionLabel
-          action={
-            data?.tw_no_key ? (
-              <Link href="/settings" className="text-xs text-indigo-600 hover:text-indigo-500 font-medium">
-                Connect Triple Whale →
-              </Link>
-            ) : tw ? (
-              <span className="text-xs text-gray-400">{tw.period.start} → {tw.period.end}</span>
-            ) : null
-          }
-        >
-          Store Performance
-        </SectionLabel>
-
-        {data?.tw_no_key ? (
-          <div className="bg-white rounded-lg border border-gray-200 p-6 text-center">
-            <p className="text-sm text-gray-500 mb-1">Triple Whale not connected</p>
-            <p className="text-xs text-gray-400 mb-4">
-              Add your Triple Whale API key and shop domain in Settings → Integrations.
-            </p>
-            <Link
-              href="/settings"
-              className="inline-block px-4 py-2 bg-gray-900 text-white text-sm rounded-md hover:bg-gray-700 transition-colors"
-            >
-              Go to Settings
-            </Link>
-          </div>
-        ) : (
-          <div className="grid grid-cols-2 lg:grid-cols-4 gap-4">
-            <KpiCard
-              label="Revenue (7d)"
-              value={fmt(tw?.revenue7d ?? null, '$')}
-              sub="Triple Whale · all attribution"
-              loading={loading}
-            />
-            <KpiCard
-              label="Orders (7d)"
-              value={fmtInt(tw?.orders7d ?? null)}
-              sub="all channels"
-              loading={loading}
-            />
-            <KpiCard
-              label="AOV"
-              value={fmt(tw?.aov ?? null, '$')}
-              sub="avg order value"
-              loading={loading}
-            />
-            <KpiCard
-              label="New Customers"
-              value={fmtInt(tw?.newCustomers ?? null)}
-              sub="7-day window"
-              loading={loading}
-            />
-          </div>
-        )}
+        <SectionLabel>Store Performance</SectionLabel>
+        <KPIDashboard brandId={brandId} />
       </div>
 
       {/* ── Row 2: Content Pipeline (Supabase) ───────────────────────────── */}
