@@ -361,7 +361,12 @@ export default function SettingsPage() {
     if (settingsRes.data) {
       const s = settingsRes.data as BrandSettingsRow
       setBrandSettings(s)
-      setContentSchedule({ ...DEFAULT_SCHEDULE, ...(s.content_schedule ?? {}) })
+      const sc = (s.content_schedule ?? {}) as Partial<ContentSchedule>
+      setContentSchedule({
+        ...DEFAULT_SCHEDULE,
+        ...sc,
+        topics_queue: Array.isArray(sc.topics_queue) ? sc.topics_queue : [],
+      })
       setAiForm({ llm_provider: s.llm_provider ?? 'anthropic', llm_model: s.llm_model ?? 'claude-sonnet-4-6', llm_api_key: '' })
       const integ = s.integrations ?? {} as IntegrationsConfig
       const twInteg = integ?.triple_whale as Record<string, string | boolean | null> | undefined
@@ -743,39 +748,41 @@ export default function SettingsPage() {
 
               <div>
                 <Label>Topics queue</Label>
-                <div className="space-y-2">
-                  {contentSchedule.topics_queue.map((topic, i) => (
-                    <div key={i} className="flex items-center gap-2">
-                      <span className="flex-1 text-sm text-gray-700 bg-gray-50 border border-gray-200 rounded px-3 py-1.5">{topic}</span>
-                      {!isReadOnly && (
-                        <button type="button" onClick={() => setContentSchedule((s) => ({ ...s, topics_queue: s.topics_queue.filter((_, j) => j !== i) }))}
-                          className="text-gray-400 hover:text-red-500 transition-colors text-xs px-2 py-1">Remove</button>
-                      )}
-                    </div>
-                  ))}
-                  {!isReadOnly && (
-                    <div className="flex gap-2">
-                      <input
-                        type="text"
-                        value={newTopic}
-                        onChange={(e) => setNewTopic(e.target.value)}
-                        onKeyDown={(e) => {
-                          if (e.key === 'Enter' && newTopic.trim()) {
-                            setContentSchedule((s) => ({ ...s, topics_queue: [...s.topics_queue, newTopic.trim()] }))
-                            setNewTopic('')
-                          }
-                        }}
-                        placeholder="Add topic and press Enter…"
-                        className="flex-1 rounded-md border border-gray-200 px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-gray-900"
-                      />
-                      <button
-                        type="button"
-                        onClick={() => { if (newTopic.trim()) { setContentSchedule((s) => ({ ...s, topics_queue: [...s.topics_queue, newTopic.trim()] })); setNewTopic('') } }}
-                        className="px-3 py-2 text-sm bg-gray-100 hover:bg-gray-200 rounded-md transition-colors"
-                      >Add</button>
-                    </div>
-                  )}
-                </div>
+                {contentSchedule.topics_queue.length > 0 && (
+                  <div className="space-y-2 max-h-48 overflow-y-auto pr-1 mb-2">
+                    {contentSchedule.topics_queue.map((topic, i) => (
+                      <div key={i} className="flex items-center gap-2">
+                        <span className="flex-1 text-sm text-gray-700 bg-gray-50 border border-gray-200 rounded px-3 py-1.5">{topic}</span>
+                        {!isReadOnly && (
+                          <button type="button" onClick={() => setContentSchedule((s) => ({ ...s, topics_queue: s.topics_queue.filter((_, j) => j !== i) }))}
+                            className="text-gray-400 hover:text-red-500 transition-colors text-xs px-2 py-1">Remove</button>
+                        )}
+                      </div>
+                    ))}
+                  </div>
+                )}
+                {!isReadOnly && (
+                  <div className="flex gap-2">
+                    <input
+                      type="text"
+                      value={newTopic}
+                      onChange={(e) => setNewTopic(e.target.value)}
+                      onKeyDown={(e) => {
+                        if (e.key === 'Enter' && newTopic.trim()) {
+                          setContentSchedule((s) => ({ ...s, topics_queue: [...(Array.isArray(s.topics_queue) ? s.topics_queue : []), newTopic.trim()] }))
+                          setNewTopic('')
+                        }
+                      }}
+                      placeholder="Add topic and press Enter…"
+                      className="flex-1 rounded-md border border-gray-200 px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-gray-900"
+                    />
+                    <button
+                      type="button"
+                      onClick={() => { if (newTopic.trim()) { setContentSchedule((s) => ({ ...s, topics_queue: [...(Array.isArray(s.topics_queue) ? s.topics_queue : []), newTopic.trim()] })); setNewTopic('') } }}
+                      className="px-3 py-2 text-sm bg-gray-100 hover:bg-gray-200 rounded-md transition-colors"
+                    >Add</button>
+                  </div>
+                )}
                 <Hint>The cron job cycles through these topics. Leave empty to use a default topic.</Hint>
               </div>
 
