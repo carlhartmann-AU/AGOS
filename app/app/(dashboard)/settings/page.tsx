@@ -83,8 +83,10 @@ type AIForm = { llm_provider: string; llm_model: string; llm_api_key: string }
 type IntegForm = {
   shopify_store_url: string
   shopify_blog_id: string
+  shopify_access_token: string
   dotdigital_endpoint: string
   n8n_webhook_base: string
+  triple_whale_api_key: string
 }
 
 // ─── Primitive UI helpers ─────────────────────────────────────────────────────
@@ -300,7 +302,8 @@ export default function SettingsPage() {
   const [aiTestResult, setAiTestResult] = useState<'ok' | 'fail' | null>(null)
 
   // Integrations
-  const [integForm, setIntegForm] = useState<IntegForm>({ shopify_store_url: '', shopify_blog_id: '', dotdigital_endpoint: '', n8n_webhook_base: '' })
+  const [integForm, setIntegForm] = useState<IntegForm>({ shopify_store_url: '', shopify_blog_id: '', shopify_access_token: '', dotdigital_endpoint: '', n8n_webhook_base: '', triple_whale_api_key: '' })
+  const [twTestState, setTwTestState] = useState<'idle' | 'testing' | 'ok' | 'fail'>('idle')
   const [integSave, setIntegSave] = useState<SectionSave>({ state: 'idle', error: null })
 
   // Team
@@ -360,12 +363,16 @@ export default function SettingsPage() {
       setContentSchedule({ ...DEFAULT_SCHEDULE, ...(s.content_schedule ?? {}) })
       setAiForm({ llm_provider: s.llm_provider ?? 'anthropic', llm_model: s.llm_model ?? 'claude-sonnet-4-6', llm_api_key: '' })
       const integ = s.integrations ?? {} as IntegrationsConfig
+      const twInteg = integ?.triple_whale as Record<string, string | boolean | null> | undefined
       setIntegForm({
-        shopify_store_url: integ.shopify?.store_url ?? '',
-        shopify_blog_id: integ.shopify?.blog_id ?? '',
-        dotdigital_endpoint: integ.dotdigital?.endpoint ?? '',
-        n8n_webhook_base: integ.n8n_webhook_base ?? '',
+        shopify_store_url: (integ?.shopify?.store_url as string | null) ?? '',
+        shopify_blog_id: (integ?.shopify?.blog_id as string | null) ?? '',
+        shopify_access_token: '',  // never prefill tokens
+        dotdigital_endpoint: (integ?.dotdigital?.endpoint as string | null) ?? '',
+        n8n_webhook_base: (integ?.n8n_webhook_base as string | null) ?? '',
+        triple_whale_api_key: '',  // never prefill tokens
       })
+      setTwTestState(twInteg?.api_key ? 'ok' : 'idle')
     }
 
     setUserRole((roleRes?.role as UserRole | undefined) ?? 'viewer')
@@ -471,22 +478,44 @@ export default function SettingsPage() {
   async function saveIntegrations() {
     setIntegSave({ state: 'saving', error: null })
     try {
-      const integrations: IntegrationsConfig = {
+      // Read existing integrations first so we don't wipe stored tokens when fields are blank
+      const existing = (brandSettings?.integrations ?? {}) as Record<string, Record<string, string | boolean | null> | string | null>
+      const existingShopify = existing.shopify as Record<string, string | boolean | null> | undefined
+      const existingTw = existing.triple_whale as Record<string, string | boolean | null> | undefined
+
+      const integrations = {
         shopify: {
           connected: !!(integForm.shopify_store_url && integForm.shopify_blog_id),
-          store_url: integForm.shopify_store_url || null,
-          blog_id: integForm.shopify_blog_id || null,
+          store_url: integForm.shopify_store_url || (existingShopify?.store_url ?? null),
+          blog_id: integForm.shopify_blog_id || (existingShopify?.blog_id ?? null),
+          // Only update token if a new one was entered; otherwise keep existing
+          access_token: integForm.shopify_access_token.trim() || (existingShopify?.access_token ?? null),
         },
         dotdigital: { connected: !!integForm.dotdigital_endpoint, endpoint: integForm.dotdigital_endpoint || null },
         gorgias: { connected: false },
-        triple_whale: { connected: false },
+        triple_whale: {
+          connected: twTestState === 'ok',
+          api_key: integForm.triple_whale_api_key.trim() || (existingTw?.api_key ?? null),
+        },
         n8n_webhook_base: integForm.n8n_webhook_base || null,
       }
       await upsertBrandSettings({ integrations } as Partial<BrandSettingsRow>)
-      // Also mirror n8n_webhook_base to brand_config for agent access
       if (integForm.n8n_webhook_base) await upsertConfig({ n8n_webhook_base: integForm.n8n_webhook_base })
+      // Clear sensitive fields after save
+      setIntegForm((f) => ({ ...f, shopify_access_token: '', triple_whale_api_key: '' }))
       afterSave(setIntegSave, null)
     } catch (e) { afterSave(setIntegSave, e instanceof Error ? e.message : 'Save failed') }
+  }
+
+  async function handleTestTripleWhale() {
+    setTwTestState('testing')
+    const res = await fetch('/api/integrations/triple-whale/test', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ brand_id: activeBrand?.brand_id, api_key: integForm.triple_whale_api_key.trim() || undefined }),
+    })
+    const data = await res.json()
+    setTwTestState(data.ok ? 'ok' : 'fail')
   }
 
   async function handleGenerateNow() {
@@ -832,6 +861,17 @@ export default function SettingsPage() {
                   <TextInput value={integForm.shopify_blog_id} onChange={(v) => setIntegForm((f) => ({ ...f, shopify_blog_id: v }))} placeholder="94553112861" disabled={isReadOnly} />
                   <Hint>Find in Shopify Admin → Online Store → Blog Posts → URL.</Hint>
                 </div>
+                <div>
+                  <Label>Admin API access token</Label>
+                  <TextInput
+                    type="password"
+                    value={integForm.shopify_access_token}
+                    onChange={(v) => setIntegForm((f) => ({ ...f, shopify_access_token: v }))}
+                    placeholder={(brandSettings?.integrations as unknown as Record<string, Record<string, string | null>> | null)?.shopify?.access_token ? '••••••••••••••••' : 'shpat_…'}
+                    disabled={isReadOnly}
+                  />
+                  <Hint>Required for dashboard revenue metrics. Shopify Admin → Settings → Apps and sales channels → Develop apps → your app → API credentials.</Hint>
+                </div>
               </div>
 
               <div className="border-t border-gray-100 pt-4 space-y-3">
@@ -854,19 +894,47 @@ export default function SettingsPage() {
                 </div>
               </div>
 
-              <div className="border-t border-gray-100 pt-4 space-y-2">
-                {[
-                  { name: 'Gorgias', note: 'Coming soon — Phase 3' },
-                  { name: 'Triple Whale', note: 'Coming soon — see known issues' },
-                ].map((i) => (
-                  <div key={i.name} className="flex items-center justify-between py-2">
-                    <div>
-                      <span className="text-sm font-medium text-gray-900">{i.name}</span>
-                      <span className="ml-2 text-xs text-gray-400">{i.note}</span>
-                    </div>
-                    <ConnectedBadge connected={false} />
+              {/* Triple Whale */}
+              <div className="border-t border-gray-100 pt-4 space-y-3">
+                <div className="flex items-center justify-between">
+                  <h4 className="text-sm font-medium text-gray-900">Triple Whale</h4>
+                  <ConnectedBadge connected={twTestState === 'ok'} />
+                </div>
+                <div>
+                  <Label>API key</Label>
+                  <TextInput
+                    type="password"
+                    value={integForm.triple_whale_api_key}
+                    onChange={(v) => { setIntegForm((f) => ({ ...f, triple_whale_api_key: v })); setTwTestState('idle') }}
+                    placeholder={(brandSettings?.integrations as unknown as Record<string, Record<string, string | null>> | null)?.triple_whale?.api_key ? '••••••••••••••••' : 'tw_…'}
+                    disabled={isReadOnly}
+                  />
+                </div>
+                {!isReadOnly && (
+                  <div className="flex items-center gap-3">
+                    <button
+                      type="button"
+                      onClick={handleTestTripleWhale}
+                      disabled={twTestState === 'testing'}
+                      className="px-3 py-2 text-sm rounded-md border border-gray-200 text-gray-600 hover:bg-gray-50 disabled:opacity-50 transition-colors"
+                    >
+                      {twTestState === 'testing' ? 'Testing…' : 'Test connection'}
+                    </button>
+                    {twTestState === 'ok' && <span className="text-xs text-green-600">✓ Connected</span>}
+                    {twTestState === 'fail' && <span className="text-xs text-red-500">Connection failed — check your API key</span>}
                   </div>
-                ))}
+                )}
+              </div>
+
+              {/* Gorgias */}
+              <div className="border-t border-gray-100 pt-4">
+                <div className="flex items-center justify-between py-2">
+                  <div>
+                    <span className="text-sm font-medium text-gray-900">Gorgias</span>
+                    <span className="ml-2 text-xs text-gray-400">Coming soon — Phase 3</span>
+                  </div>
+                  <ConnectedBadge connected={false} />
+                </div>
               </div>
             </Section>
           )
