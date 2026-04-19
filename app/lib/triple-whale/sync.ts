@@ -13,7 +13,7 @@ export interface SyncOptions {
   apiKey: string
   shopDomain: string
   triggeredBy: SyncTrigger
-  days?: number
+  dates: string[]  // YYYY-MM-DD, any order — caller builds the list
 }
 
 export interface SyncResult {
@@ -38,19 +38,10 @@ export interface SyncResult {
  * 6. Update tw_sync_log row (completed)
  */
 export async function syncTripleWhale(opts: SyncOptions): Promise<SyncResult> {
-  const { supabase, brandId, apiKey, shopDomain, triggeredBy, days = 1 } = opts
+  const { supabase, brandId, apiKey, shopDomain, triggeredBy, dates } = opts
   const startedAt = Date.now()
 
-  // 1. Build list of dates (today back N days)
-  const dates: string[] = []
-  const now = new Date()
-  for (let i = 0; i < days; i++) {
-    const d = new Date(now)
-    d.setUTCDate(d.getUTCDate() - i)
-    dates.push(d.toISOString().slice(0, 10))
-  }
-
-  // 2. Log start
+  // 1. Log start
   const { data: logRow } = await supabase
     .from('tw_sync_log')
     .insert({
@@ -150,7 +141,7 @@ export async function syncTripleWhale(opts: SyncOptions): Promise<SyncResult> {
     success: status === 'success',
     status,
     days_synced: successful.length,
-    days_requested: days,
+    days_requested: dates.length,
     errors,
     duration_ms,
     sync_log_id: syncLogId,

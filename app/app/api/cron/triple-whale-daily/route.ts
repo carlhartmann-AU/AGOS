@@ -32,17 +32,19 @@ export async function GET(req: NextRequest) {
     return tw?.api_key && tw?.shop_domain
   })
 
+  const today = new Date().toISOString().slice(0, 10)
+
   const results = await Promise.allSettled(
     configured.map(row => {
       const integ = row.integrations as Record<string, Record<string, string | null> | null>
       const tw = integ.triple_whale as Record<string, string>
       return syncTripleWhale({
         supabase,
-        brandId: row.id, // UUID PK
+        brandId: row.id,
         apiKey: tw.api_key,
         shopDomain: tw.shop_domain,
         triggeredBy: 'cron',
-        days: 1,
+        dates: [today],
       })
     })
   )

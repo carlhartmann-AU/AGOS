@@ -6,7 +6,40 @@ import { createAdminClient } from '@/lib/supabase/admin'
 import { syncTripleWhale, type SyncTrigger } from '@/lib/triple-whale/sync'
 
 export const dynamic = 'force-dynamic'
-export const maxDuration = 30
+export const maxDuration = 60
+
+const DATE_RE = /^\d{4}-\d{2}-\d{2}$/
+const MAX_DAYS = 15
+
+function buildDates(
+  days?: number,
+  start_date?: string,
+  end_date?: string,
+): string[] | { error: string } {
+  if (start_date !== undefined || end_date !== undefined) {
+    if (!start_date || !end_date) return { error: 'Both start_date and end_date are required' }
+    if (!DATE_RE.test(start_date) || !DATE_RE.test(end_date)) return { error: 'start_date and end_date must be YYYY-MM-DD' }
+    if (end_date < start_date) return { error: 'end_date must be >= start_date' }
+    const dates: string[] = []
+    const cur = new Date(start_date + 'T00:00:00Z')
+    const end = new Date(end_date + 'T00:00:00Z')
+    while (cur <= end) {
+      dates.push(cur.toISOString().slice(0, 10))
+      cur.setUTCDate(cur.getUTCDate() + 1)
+    }
+    if (dates.length > MAX_DAYS) return { error: `Range exceeds ${MAX_DAYS}-day safety cap (got ${dates.length} days)` }
+    return dates
+  }
+  const n = Math.min(days ?? 1, MAX_DAYS)
+  const dates: string[] = []
+  const now = new Date()
+  for (let i = 0; i < n; i++) {
+    const d = new Date(now)
+    d.setUTCDate(d.getUTCDate() - i)
+    dates.push(d.toISOString().slice(0, 10))
+  }
+  return dates
+}
 
 export async function POST(req: NextRequest) {
   // Reachable via: (a) valid user session [middleware enforces], or
@@ -19,11 +52,22 @@ export async function POST(req: NextRequest) {
   }
 
   try {
-    const body = await req.json() as { brand_id?: string; days?: number; triggered_by?: SyncTrigger }
-    const { brand_id, days = 1, triggered_by = 'manual' } = body
+    const body = await req.json() as {
+      brand_id?: string
+      triggered_by?: SyncTrigger
+      days?: number
+      start_date?: string
+      end_date?: string
+    }
+    const { brand_id, triggered_by = 'manual', days, start_date, end_date } = body
 
     if (!brand_id) {
       return NextResponse.json({ error: 'brand_id required' }, { status: 400 })
+    }
+
+    const dates = buildDates(days, start_date, end_date)
+    if ('error' in dates) {
+      return NextResponse.json({ error: dates.error }, { status: 400 })
     }
 
     const supabase = createAdminClient()
@@ -50,11 +94,11 @@ export async function POST(req: NextRequest) {
 
     const result = await syncTripleWhale({
       supabase,
-      brandId: settings.id, // UUID PK, used as tw_daily_summary.brand_id FK
+      brandId: settings.id,
       apiKey,
       shopDomain,
       triggeredBy: triggered_by,
-      days,
+      dates,
     })
 
     return NextResponse.json(result, { status: result.success ? 200 : 207 })
