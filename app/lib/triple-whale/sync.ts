@@ -92,12 +92,15 @@ export async function syncTripleWhale(opts: SyncOptions): Promise<SyncResult> {
   if (successful.length > 0) {
     const rows = successful.map(m => ({
       brand_id: brandId,
+      shop_domain: shopDomain,           // NOT NULL, no default — must include
       date: m.date,
       revenue: m.revenue,
       orders: m.orders,
       aov: m.aov,
       new_customers: m.new_customers,
       returning_customers: m.returning_customers,
+      new_customer_orders: m.new_customers,       // legacy column alias
+      returning_customer_orders: m.returning_customers, // legacy column alias
       source_currency: m.source_currency,
       fx_rates: fxByKey.get(`${m.source_currency}|${m.date}`) ?? {},
       raw_response: m.raw_response ?? null,

@@ -101,7 +101,8 @@ export async function POST(req: NextRequest) {
       dates,
     })
 
-    return NextResponse.json(result, { status: result.success ? 200 : 207 })
+    const httpStatus = result.status === 'failed' ? 500 : 200
+    return NextResponse.json(result, { status: httpStatus })
   } catch (err) {
     console.error('[tw-sync] error:', err)
     return NextResponse.json(
