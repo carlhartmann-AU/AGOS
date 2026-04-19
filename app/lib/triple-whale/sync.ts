@@ -128,7 +128,7 @@ export async function syncTripleWhale(opts: SyncOptions): Promise<SyncResult> {
 
     const { error: upsertErr } = await supabase
       .from('tw_daily_summary')
-      .upsert(rows, { onConflict: 'brand_id,date' })
+      .upsert(rows, { onConflict: 'shop_domain,date' })
 
     if (upsertErr) {
       console.error('[tw-sync] tw_daily_summary upsert failed:', {
