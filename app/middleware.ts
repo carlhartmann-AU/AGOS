@@ -28,6 +28,15 @@ export async function middleware(request: NextRequest) {
   const { data: { user } } = await supabase.auth.getUser()
 
   const pathname = request.nextUrl.pathname
+
+  // Allow bearer-token requests through without a user session.
+  // Used by CLI backfills and the manual sync triggered from outside the dashboard.
+  const authHeader = request.headers.get('authorization')
+  const hasCronSecret = authHeader === `Bearer ${process.env.CRON_SECRET}`
+  if (pathname === '/api/triple-whale/sync' && hasCronSecret) {
+    return NextResponse.next()
+  }
+
   const isPublicPath = PUBLIC_PATHS.some((p) => pathname.startsWith(p))
 
   if (!user && !isPublicPath) {

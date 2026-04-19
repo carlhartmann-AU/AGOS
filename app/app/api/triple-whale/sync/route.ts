@@ -9,6 +9,15 @@ export const dynamic = 'force-dynamic'
 export const maxDuration = 30
 
 export async function POST(req: NextRequest) {
+  // Reachable via: (a) valid user session [middleware enforces], or
+  // (b) Authorization: Bearer <CRON_SECRET> [middleware early-returns].
+  const authHeader = req.headers.get('authorization')
+  const isAuthorised = authHeader === `Bearer ${process.env.CRON_SECRET}`
+
+  if (!isAuthorised) {
+    // Request came via a user session — middleware already validated it.
+  }
+
   try {
     const body = await req.json() as { brand_id?: string; days?: number; triggered_by?: SyncTrigger }
     const { brand_id, days = 1, triggered_by = 'manual' } = body
