@@ -42,7 +42,7 @@ export async function syncTripleWhale(opts: SyncOptions): Promise<SyncResult> {
   const startedAt = Date.now()
 
   // 1. Log start
-  const { data: logRow } = await supabase
+  const { data: logRow, error: logErr } = await supabase
     .from('tw_sync_log')
     .insert({
       brand_id: brandId,
@@ -53,7 +53,19 @@ export async function syncTripleWhale(opts: SyncOptions): Promise<SyncResult> {
     .select('id')
     .single()
 
+  if (logErr) {
+    console.error('[tw-sync] tw_sync_log INSERT failed — this is the likely 500 cause:', {
+      code: logErr.code,
+      message: logErr.message,
+      details: logErr.details,
+      hint: logErr.hint,
+      brandId,
+      triggeredBy,
+    })
+  }
+
   const syncLogId = logRow?.id as string | undefined
+  console.log('[tw-sync] sync started', { syncLogId, brandId, triggeredBy, dates })
 
   // 3. Fetch TW metrics in parallel
   const twResults = await fetchMultipleDays({ apiKey, shopDomain }, dates, 3)
@@ -61,8 +73,13 @@ export async function syncTripleWhale(opts: SyncOptions): Promise<SyncResult> {
   const successful: TWDailyMetrics[] = []
   const errors: Array<{ date: string; error: string }> = []
   for (const r of twResults) {
-    if (r.metrics) successful.push(r.metrics)
-    else if (r.error) errors.push({ date: r.date, error: r.error })
+    if (r.metrics) {
+      console.log(`[tw-sync] TW fetch ok ${r.date}: revenue=${r.metrics.revenue} orders=${r.metrics.orders} currency=${r.metrics.source_currency}`)
+      successful.push(r.metrics)
+    } else if (r.error) {
+      console.error(`[tw-sync] TW fetch failed ${r.date}:`, r.error)
+      errors.push({ date: r.date, error: r.error })
+    }
   }
 
   // 4. Fetch FX rates for each successful day (based on source_currency)
@@ -107,11 +124,21 @@ export async function syncTripleWhale(opts: SyncOptions): Promise<SyncResult> {
       synced_at: new Date().toISOString(),
     }))
 
+    console.log('[tw-sync] upserting rows:', rows.map(r => ({ date: r.date, shop_domain: r.shop_domain, brand_id: r.brand_id })))
+
     const { error: upsertErr } = await supabase
       .from('tw_daily_summary')
       .upsert(rows, { onConflict: 'brand_id,date' })
 
     if (upsertErr) {
+      console.error('[tw-sync] tw_daily_summary upsert failed:', {
+        code: upsertErr.code,
+        message: upsertErr.message,
+        details: upsertErr.details,
+        hint: upsertErr.hint,
+        rows_attempted: rows.length,
+        sample_row: rows[0],
+      })
       for (const m of successful) {
         errors.push({ date: m.date, error: `Upsert failed: ${upsertErr.message}` })
       }
@@ -140,7 +167,7 @@ export async function syncTripleWhale(opts: SyncOptions): Promise<SyncResult> {
       .eq('id', syncLogId)
   }
 
-  return {
+  const result = {
     success: status === 'success',
     status,
     days_synced: successful.length,
@@ -149,4 +176,6 @@ export async function syncTripleWhale(opts: SyncOptions): Promise<SyncResult> {
     duration_ms,
     sync_log_id: syncLogId,
   }
+  console.log('[tw-sync] sync complete:', result)
+  return result
 }

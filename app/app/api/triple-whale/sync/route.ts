@@ -92,6 +92,14 @@ export async function POST(req: NextRequest) {
       return NextResponse.json({ error: 'Triple Whale credentials not configured' }, { status: 422 })
     }
 
+    console.log('[tw-sync] invoking sync:', {
+      brandId: settings.id,
+      shopDomain,
+      apiKeyPrefix: apiKey.slice(0, 8) + '…',
+      dates,
+      triggeredBy: triggered_by,
+    })
+
     const result = await syncTripleWhale({
       supabase,
       brandId: settings.id,
@@ -104,7 +112,7 @@ export async function POST(req: NextRequest) {
     const httpStatus = result.status === 'failed' ? 500 : 200
     return NextResponse.json(result, { status: httpStatus })
   } catch (err) {
-    console.error('[tw-sync] error:', err)
+    console.error('[tw-sync] unhandled exception:', err instanceof Error ? err.stack : err)
     return NextResponse.json(
       { error: err instanceof Error ? err.message : 'Sync failed' },
       { status: 500 }

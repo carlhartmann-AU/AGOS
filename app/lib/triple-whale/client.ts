@@ -94,10 +94,12 @@ export async function fetchDailyMetrics(opts: TWFetchOptions): Promise<TWDailyMe
 
   if (!summaryRes.ok) {
     const errBody = await summaryRes.text()
+    console.error(`[tw-client] summary-page ${summaryRes.status} for ${date}:`, errBody.slice(0, 500))
     throw new Error(`TW summary-page failed ${summaryRes.status}: ${errBody.slice(0, 300)}`)
   }
 
   const summary = await summaryRes.json()
+  console.log(`[tw-client] summary-page raw ${date}:`, JSON.stringify(summary).slice(0, 500))
   const revenue = getMetric(summary, 'sales')    // 'sales' = gross-discounts+tax+ship (matches TW dashboard)
   const orders = getMetric(summary, 'orders')
   const source_currency = extractCurrency(summary, 'GBP')
@@ -116,7 +118,11 @@ export async function fetchDailyMetrics(opts: TWFetchOptions): Promise<TWDailyMe
     }),
   })
 
+  if (!mobyRes.ok) {
+    console.error(`[tw-client] moby non-200 ${mobyRes.status} for ${date}`)
+  }
   const moby = mobyRes.ok ? await mobyRes.json() : { responses: [{ isError: true }] }
+  console.log(`[tw-client] moby raw ${date}:`, JSON.stringify(moby).slice(0, 500))
   const aov = getMobyAnswer(moby, 'aov') || (orders > 0 ? revenue / orders : 0)
   const new_customers = getMobyAnswer(moby, 'new_customer_orders')
   const returning_customers = getMobyAnswer(moby, 'returning_customer_orders')
