@@ -136,33 +136,26 @@ export default function KPIDashboard({ brandId, initialCurrency }: Props) {
 
   return (
     <div className="space-y-4">
-      {/* Controls: selectedWindow toggle + currency toggle + freshness + refresh */}
-      <div className="flex items-center justify-between flex-wrap gap-3">
-        <div className="flex items-center gap-2 flex-wrap">
-          <div className="inline-flex rounded-lg p-1" style={{ border: '1px solid var(--border)', background: 'var(--surface)' }}>
+      {/* Controls row */}
+      <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', flexWrap: 'wrap', gap: 10, marginBottom: 12 }}>
+        <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+          <div className="seg">
             {WINDOW_OPTIONS.map(opt => (
               <button
                 key={opt.key}
                 onClick={() => setSelectedWindow(opt.key)}
-                className="px-3 py-1.5 text-sm font-medium rounded-md transition"
-                style={selectedWindow === opt.key
-                  ? { background: 'var(--text)', color: '#fff' }
-                  : { color: 'var(--text-secondary)' }}
+                className={selectedWindow === opt.key ? 'on' : ''}
               >
-                {opt.label}
+                {opt.key.toUpperCase()}
               </button>
             ))}
           </div>
-
-          <div className="inline-flex rounded-lg p-1" style={{ border: '1px solid var(--border)', background: 'var(--surface)' }}>
+          <div className="seg">
             {CURRENCY_OPTIONS.map(c => (
               <button
                 key={c}
                 onClick={() => handleCurrencyChange(c)}
-                className="px-2.5 py-1.5 text-sm font-medium rounded-md transition"
-                style={currency === c
-                  ? { background: 'var(--text)', color: '#fff' }
-                  : { color: 'var(--text-secondary)' }}
+                className={currency === c ? 'on' : ''}
                 title={`Display in ${c}`}
               >
                 {c}
@@ -170,40 +163,34 @@ export default function KPIDashboard({ brandId, initialCurrency }: Props) {
             ))}
           </div>
         </div>
-
-        <div className="flex items-center gap-2">
-          <FreshnessPill
-            label={lastSyncedLabel}
-            refreshing={refreshing}
-            stale={isStale}
-            error={!!error}
-          />
+        <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+          <FreshnessPill label={lastSyncedLabel} refreshing={refreshing} stale={isStale} error={!!error} />
           <button
             onClick={handleRefresh}
             disabled={refreshing}
-            className="inline-flex items-center gap-1.5 px-3 py-1.5 text-sm font-medium rounded-lg disabled:opacity-50 transition-colors hover:brightness-95"
-            style={{ color: 'var(--text-secondary)', background: 'var(--surface)', border: '1px solid var(--border)' }}
+            className="btn"
+            style={{ opacity: refreshing ? 0.6 : 1 }}
           >
             <RefreshIcon spinning={refreshing} />
-            Refresh
+            {refreshing ? 'Syncing…' : 'Refresh'}
           </button>
         </div>
       </div>
 
       {isStale && !refreshing && (
-        <div className="rounded-lg px-3 py-2 text-sm text-amber-800 bg-amber-50 border border-amber-200">
+        <div className="err-banner" style={{ background: 'var(--warn-bg)', color: 'var(--warn)', borderColor: 'color-mix(in srgb, var(--warn) 25%, transparent)', marginBottom: 12 }}>
           Data is over 48 hours old. Daily sync may have failed — try refreshing manually.
         </div>
       )}
 
       {hasPartialCache && !isStale && (
-        <div className="rounded-lg px-3 py-2 text-sm text-blue-700 bg-blue-50 border border-blue-200">
+        <div style={{ padding: '8px 12px', background: 'var(--accent-bg)', border: '1px solid var(--accent-line)', borderRadius: 6, fontSize: 12, color: 'var(--accent)', marginBottom: 12 }}>
           Showing {kpis!.days_cached} of {kpis!.days_expected} days. Older data is being backfilled.
         </div>
       )}
 
       {error && (
-        <div className="rounded-lg px-3 py-2 text-sm text-red-700 bg-red-50 border border-red-200">
+        <div className="err-banner" style={{ marginBottom: 12 }}>
           {error}
         </div>
       )}
@@ -211,7 +198,7 @@ export default function KPIDashboard({ brandId, initialCurrency }: Props) {
       {loading && !kpis ? (
         <KPIGridSkeleton />
       ) : kpis ? (
-        <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
+        <div className="kpi-grid">
           <KPITile label="Revenue" value={formatCurrency(kpis.revenue, displayCurrency)} />
           <KPITile label="Orders" value={kpis.orders.toLocaleString()} />
           <KPITile label="AOV" value={formatCurrency(kpis.aov, displayCurrency)} />
@@ -232,13 +219,14 @@ function FreshnessPill({ label, refreshing, stale, error }: {
   stale: boolean
   error: boolean
 }) {
-  let tone = 'text-gray-500 bg-gray-50 border-gray-200'
-  if (refreshing) tone = 'text-blue-700 bg-blue-50 border-blue-200'
-  else if (error) tone = 'text-red-700 bg-red-50 border-red-200'
-  else if (stale) tone = 'text-amber-700 bg-amber-50 border-amber-200'
+  let chipClass = ''
+  if (error) chipClass = 'bad'
+  else if (stale) chipClass = 'warn'
+  else chipClass = 'ok'
 
   return (
-    <span className={`inline-flex items-center gap-1.5 text-xs px-2 py-1 rounded-full border ${tone}`}>
+    <span className={`chip ${chipClass}`}>
+      <span className="dot" />
       {refreshing && <Spinner />}
       {refreshing ? 'Syncing…' : label}
     </span>
@@ -247,20 +235,24 @@ function FreshnessPill({ label, refreshing, stale, error }: {
 
 function KPITile({ label, value }: { label: string; value: string }) {
   return (
-    <div className="rounded-lg p-5" style={{ background: 'var(--surface)', border: '1px solid var(--border)' }}>
-      <div className="text-xs font-semibold uppercase tracking-wider" style={{ color: 'var(--text-muted)' }}>{label}</div>
-      <div className="mt-1.5 text-2xl font-semibold" style={{ color: 'var(--text)' }}>{value}</div>
+    <div className="kpi-tile">
+      <div className="kpi-label">{label}</div>
+      <div className="kpi-value tnum">{value}</div>
     </div>
   )
 }
 
 function KPIGridSkeleton() {
   return (
-    <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
+    <div className="kpi-grid">
       {[0, 1, 2, 3].map(i => (
-        <div key={i} className="rounded-lg p-5" style={{ background: 'var(--surface)', border: '1px solid var(--border)' }}>
-          <div className="h-3 w-16 rounded animate-pulse" style={{ background: 'var(--border)' }} />
-          <div className="mt-2.5 h-7 w-24 rounded animate-pulse" style={{ background: 'var(--border)' }} />
+        <div key={i} className="kpi-tile">
+          <div className="kpi-label">
+            <div className="skel" style={{ height: 10, width: 60 }} />
+          </div>
+          <div className="kpi-value" style={{ marginTop: 8 }}>
+            <div className="skel" style={{ height: 24, width: 100 }} />
+          </div>
         </div>
       ))}
     </div>

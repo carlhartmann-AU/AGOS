@@ -3,7 +3,6 @@
 import { useEffect, useState, useCallback } from 'react'
 import Link from 'next/link'
 import { useBrand } from '@/context/BrandContext'
-import { PageHeader } from '@/components/PageHeader'
 import KPIDashboard from '@/components/dashboard/KPIDashboard'
 import type { ContentQueueStatus } from '@/types'
 import type { Recommendation, Anomaly } from '@/lib/agents/intelligence/types'
@@ -43,52 +42,43 @@ type Alert = {
 
 // ─── UI helpers ───────────────────────────────────────────────────────────────
 
-const STATUS_STYLES: Partial<Record<ContentQueueStatus, string>> = {
-  pending:          'bg-yellow-100 text-yellow-700',
-  compliance_check: 'bg-blue-100 text-blue-700',
-  compliance_fail:  'bg-red-100 text-red-700',
-  escalated:        'bg-orange-100 text-orange-700',
-  approved:         'bg-green-100 text-green-700',
-  rejected:         'bg-red-100 text-red-600',
-  publish_pending:  'bg-purple-100 text-purple-700',
-  published:        'bg-green-100 text-green-800',
-  failed:           'bg-red-100 text-red-700',
-}
 
-const COMPLIANCE_BADGE: Record<string, string> = {
-  passed:   'bg-green-100 text-green-700',
-  warnings: 'bg-amber-100 text-amber-700',
-  escalated:'bg-orange-100 text-orange-700',
-  blocked:  'bg-red-100 text-red-700',
+const COMPLIANCE_CHIP: Record<string, string> = {
+  passed:   'ok',
+  warnings: 'warn',
+  escalated:'esc',
+  blocked:  'bad',
 }
 
 const COMPLIANCE_LABEL: Record<string, string> = {
-  passed: 'Passed', warnings: 'Warnings', escalated: 'Escalated', blocked: 'Blocked',
+  passed: 'PASSED', warnings: 'WARNINGS', escalated: 'ESCALATED', blocked: 'BLOCKED',
 }
 
-const ALERT_SEVERITY_STYLES: Record<string, string> = {
-  info:     'bg-blue-50 border-blue-200 text-blue-700',
-  warning:  'bg-amber-50 border-amber-200 text-amber-700',
-  critical: 'bg-red-50 border-red-200 text-red-700',
+const ALERT_SEVERITY_CLASS: Record<string, string> = {
+  info:     'ok',
+  warning:  'warn',
+  critical: 'bad',
 }
 
-const PRIORITY_BADGE: Record<string, string> = {
-  high:   'bg-red-100 text-red-700',
-  medium: 'bg-amber-100 text-amber-700',
-  low:    'bg-gray-100 text-gray-600',
+const PRIORITY_CHIP: Record<string, string> = {
+  high:   'bad',
+  medium: 'warn',
+  low:    'accent',
 }
 
 function ComplianceStatusBadge({ status, createdAt }: { status: string | null | undefined; createdAt?: string }) {
   const isRecent = !!createdAt && (Date.now() - new Date(createdAt).getTime()) < 60_000
-  const label = status
-    ? (COMPLIANCE_LABEL[status] ?? status)
-    : isRecent ? 'Checking…' : '—'
-  const style = status
-    ? (COMPLIANCE_BADGE[status] ?? 'bg-gray-100 text-gray-500')
-    : isRecent ? 'bg-blue-50 text-blue-500' : 'bg-transparent text-gray-300'
+  if (!status) {
+    return (
+      <span className="chip mono" style={{ color: isRecent ? 'var(--accent)' : 'var(--ink-5)' }}>
+        {isRecent ? 'Checking…' : '—'}
+      </span>
+    )
+  }
   return (
-    <span className={`flex-shrink-0 text-xs font-medium px-2 py-0.5 rounded ${style}`}>
-      {label}
+    <span className={`chip mono ${COMPLIANCE_CHIP[status] ?? ''}`}>
+      <span className="dot" />
+      {COMPLIANCE_LABEL[status] ?? status.toUpperCase()}
     </span>
   )
 }
@@ -102,26 +92,26 @@ function fmtDate(d: string) {
   return new Date(d).toLocaleDateString('en-AU', { day: 'numeric', month: 'short' })
 }
 
-function KpiCard({ label, value, sub, loading }: {
-  label: string; value: string; sub?: string; loading?: boolean
+function StatCell({ label, value, sub, loading, color }: {
+  label: string; value: string; sub?: string; loading?: boolean; color?: string
 }) {
   return (
-    <div className="rounded-lg p-5" style={{ background: 'var(--surface)', border: '1px solid var(--border)' }}>
-      <p className="text-xs font-semibold uppercase tracking-wider" style={{ color: 'var(--text-muted)' }}>{label}</p>
+    <div className="stat-cell">
+      <div className="stat-label">{label}</div>
       {loading ? (
-        <div className="mt-2.5 h-7 w-24 rounded animate-pulse" style={{ background: 'var(--border)' }} />
+        <div className="skel" style={{ height: 20, width: 60, marginTop: 4 }} />
       ) : (
-        <p className="mt-1.5 text-2xl font-semibold" style={{ color: 'var(--text)' }}>{value}</p>
+        <div className="stat-value tnum" style={color ? { color } : undefined}>{value}</div>
       )}
-      {sub && !loading && <p className="mt-0.5 text-xs" style={{ color: 'var(--text-muted)' }}>{sub}</p>}
+      {sub && !loading && <div className="stat-sub">{sub}</div>}
     </div>
   )
 }
 
 function SectionLabel({ children, action }: { children: React.ReactNode; action?: React.ReactNode }) {
   return (
-    <div className="flex items-center justify-between mb-3">
-      <p className="text-xs font-semibold uppercase tracking-wider" style={{ color: 'var(--text-muted)' }}>{children}</p>
+    <div className="section-head">
+      <h2 style={{ margin: 0, fontSize: 13, fontWeight: 600, letterSpacing: '0.02em', textTransform: 'uppercase', color: 'var(--ink-3)' }}>{children}</h2>
       {action}
     </div>
   )
@@ -156,29 +146,46 @@ function ActiveAlerts({ brandId }: { brandId: string }) {
   }
 
   return (
-    <div className="rounded-lg p-5" style={{ background: 'var(--surface)', border: '1px solid var(--border)' }}>
-      <h3 className="text-sm font-medium mb-3" style={{ color: 'var(--text)' }}>Active alerts</h3>
+    <div className="card">
+      <div className="card-head">
+        <h3>Active alerts</h3>
+        {alerts.length > 0 && (
+          <span className="chip mono">{alerts.length}</span>
+        )}
+      </div>
       {loading ? (
-        <div className="space-y-2">
-          {[1, 2].map(i => <div key={i} className="h-10 rounded animate-pulse" style={{ background: 'var(--border-subtle)' }} />)}
+        <div className="card-body" style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
+          {[1, 2].map(i => <div key={i} className="skel" style={{ height: 40 }} />)}
         </div>
       ) : alerts.length === 0 ? (
-        <p className="text-sm" style={{ color: 'var(--text-muted)' }}>No active alerts</p>
+        <div className="empty">
+          <div className="glyph">✓</div>
+          <div className="h">No active alerts</div>
+          <p>All systems running normally.</p>
+        </div>
       ) : (
-        <div className="space-y-2">
+        <div>
           {alerts.map(alert => (
-            <div key={alert.id} className={`flex items-start justify-between gap-3 px-3 py-2.5 rounded-lg border text-xs ${ALERT_SEVERITY_STYLES[alert.severity] ?? 'bg-gray-50 border-gray-200 text-gray-700'}`}>
-              <div className="min-w-0">
-                <p className="font-semibold">{alert.title}</p>
-                <p className="mt-0.5 opacity-80 line-clamp-2">{alert.description}</p>
+            <div key={alert.id} className="alert-row">
+              <div className={`bar ${ALERT_SEVERITY_CLASS[alert.severity] ?? 'ok'}`} />
+              <div style={{ minWidth: 0 }}>
+                <div className="title">{alert.title}</div>
+                <div className="meta">
+                  <span className="mono">{alert.alert_type}</span>
+                  <span>·</span>
+                  <span className="mono">{fmtDate(alert.created_at)}</span>
+                </div>
               </div>
-              <button
-                onClick={() => acknowledge(alert.id)}
-                disabled={acking === alert.id}
-                className="flex-shrink-0 text-xs px-2 py-1 rounded bg-white/60 hover:bg-white border border-current opacity-70 hover:opacity-100 transition-opacity disabled:opacity-40"
-              >
-                {acking === alert.id ? '…' : 'Ack'}
-              </button>
+              <div className="actions">
+                <button
+                  onClick={() => acknowledge(alert.id)}
+                  disabled={acking === alert.id}
+                  className="btn ghost"
+                  style={{ opacity: acking === alert.id ? 0.4 : 1 }}
+                >
+                  {acking === alert.id ? '…' : 'Ack'}
+                </button>
+              </div>
             </div>
           ))}
         </div>
@@ -245,8 +252,8 @@ function IntelligenceSection({ brandId }: { brandId: string }) {
           <button
             onClick={generateReport}
             disabled={generating}
-            className="text-xs font-medium px-3 py-1.5 rounded disabled:opacity-50 transition-colors"
-            style={{ background: 'var(--accent)', color: '#fff' }}
+            className="btn primary"
+            style={{ opacity: generating ? 0.6 : 1 }}
           >
             {generating ? 'Generating…' : 'Generate report'}
           </button>
@@ -256,41 +263,43 @@ function IntelligenceSection({ brandId }: { brandId: string }) {
       </SectionLabel>
 
       {genError && (
-        <div className="mb-3 px-4 py-2 bg-red-50 border border-red-200 rounded-lg text-xs text-red-600">
+        <div className="err-banner" style={{ marginBottom: 12 }}>
           {genError}
         </div>
       )}
 
       {loadingReport ? (
-        <div className="rounded-lg p-5 space-y-3" style={{ background: 'var(--surface)', border: '1px solid var(--border)' }}>
-          <div className="h-4 rounded w-1/3 animate-pulse" style={{ background: 'var(--border)' }} />
-          <div className="h-3 rounded animate-pulse" style={{ background: 'var(--border)' }} />
-          <div className="h-3 rounded w-5/6 animate-pulse" style={{ background: 'var(--border)' }} />
+        <div className="card card-body" style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
+          <div className="skel" style={{ height: 14, width: '33%' }} />
+          <div className="skel" style={{ height: 12 }} />
+          <div className="skel" style={{ height: 12, width: '80%' }} />
         </div>
       ) : !report ? (
-        <div className="rounded-lg px-5 py-10 text-center text-sm" style={{ background: 'var(--surface)', border: '1px solid var(--border)', color: 'var(--text-muted)' }}>
-          No reports yet. Click &ldquo;Generate report&rdquo; to analyse your data.
+        <div className="card">
+          <div className="empty">
+            <div className="glyph">◎</div>
+            <div className="h">No reports yet</div>
+            <p>Click &ldquo;Generate report&rdquo; to analyse your data.</p>
+          </div>
         </div>
       ) : (
-        <div className="rounded-lg divide-y" style={{ background: 'var(--surface)', border: '1px solid var(--border)', borderColor: 'var(--border)' }}>
+        <div className="card">
           {/* Header */}
-          <div className="px-5 py-3 flex items-center justify-between">
-            <p className="text-xs font-medium text-gray-700">
-              Report for {fmtDate(report.window_start)} – {fmtDate(report.window_end)}
-            </p>
-            <p className="text-xs text-gray-400">
+          <div className="card-head">
+            <h3>Report · {fmtDate(report.window_start)} – {fmtDate(report.window_end)}</h3>
+            <span className="intel-meta">
               {new Date(report.created_at).toLocaleString('en-AU', { day: 'numeric', month: 'short', hour: '2-digit', minute: '2-digit' })}
               {report.duration_ms > 0 && ` · ${(report.duration_ms / 1000).toFixed(1)}s`}
               {report.estimated_cost_usd > 0 && ` · $${report.estimated_cost_usd.toFixed(4)}`}
-            </p>
+            </span>
           </div>
 
           {/* Narrative */}
-          <div className="px-5 py-4">
+          <div className="intel-narrative" style={{ margin: 14, borderRadius: 6 }}>
             {report.narrator_enabled && report.narrative ? (
-              <p className="text-sm leading-relaxed" style={{ color: 'var(--text-secondary)' }}>{report.narrative}</p>
+              <p>{report.narrative}</p>
             ) : (
-              <p className="text-sm italic" style={{ color: 'var(--text-muted)' }}>
+              <p style={{ fontStyle: 'italic', color: 'var(--ink-4)' }}>
                 {report.narrative === 'Insufficient data for analysis.'
                   ? 'Insufficient data for analysis.'
                   : 'AI narrative not generated — no API key configured or narrator skipped.'}
@@ -300,37 +309,37 @@ function IntelligenceSection({ brandId }: { brandId: string }) {
 
           {/* Recommendations */}
           {report.recommendations.length > 0 && (
-            <div className="px-5 py-4">
-              <p className="text-xs font-semibold uppercase tracking-wide mb-2" style={{ color: 'var(--text-muted)' }}>Recommendations</p>
-              <div className="space-y-2">
-                {report.recommendations.map((rec, i) => (
-                  <div key={i} className="flex items-start gap-2.5 p-3 rounded-lg" style={{ background: 'var(--bg)' }}>
-                    <span className={`flex-shrink-0 text-xs font-medium px-1.5 py-0.5 rounded capitalize ${PRIORITY_BADGE[rec.priority] ?? 'bg-gray-100 text-gray-600'}`}>
-                      {rec.priority}
+            <div style={{ padding: '0 14px 14px' }}>
+              <div className="stat-label" style={{ marginBottom: 8 }}>Recommendations</div>
+              {report.recommendations.map((rec, i) => (
+                <div key={i} className="intel-rec">
+                  <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 6 }}>
+                    <span className={`chip mono ${PRIORITY_CHIP[rec.priority] ?? ''}`}>
+                      {rec.priority.toUpperCase()}
                     </span>
-                    <div>
-                      <p className="text-xs font-semibold" style={{ color: 'var(--text)' }}>{rec.title}</p>
-                      <p className="text-xs mt-0.5" style={{ color: 'var(--text-secondary)' }}>{rec.description}</p>
-                      <p className="text-xs mt-1 text-indigo-600">→ {rec.suggested_action}</p>
-                    </div>
+                    <span className="mono" style={{ fontSize: 10, color: 'var(--ink-4)', textTransform: 'uppercase', letterSpacing: '0.08em' }}>{rec.category ?? ''}</span>
                   </div>
-                ))}
-              </div>
+                  <div style={{ fontWeight: 500, fontSize: 13, color: 'var(--ink)', marginBottom: 2 }}>{rec.title}</div>
+                  <div style={{ fontSize: 12, color: 'var(--ink-3)', marginBottom: 4 }}>{rec.description}</div>
+                  <div style={{ fontSize: 11, color: 'var(--accent)', fontFamily: 'Geist Mono, monospace' }}>→ {rec.suggested_action}</div>
+                </div>
+              ))}
             </div>
           )}
 
           {/* Anomalies */}
           {report.anomalies.length > 0 && (
-            <div className="px-5 py-4">
-              <p className="text-xs font-semibold uppercase tracking-wide mb-2" style={{ color: 'var(--text-muted)' }}>Anomalies detected</p>
-              <div className="space-y-1.5">
-                {report.anomalies.map((a, i) => (
-                  <div key={i} className={`px-3 py-2 rounded-lg border text-xs ${ALERT_SEVERITY_STYLES[a.severity] ?? 'bg-gray-50 border-gray-200 text-gray-600'}`}>
-                    <p className="font-semibold">{a.title}</p>
-                    <p className="mt-0.5 opacity-80">{a.description}</p>
+            <div style={{ padding: '0 14px 14px' }}>
+              <div className="stat-label" style={{ marginBottom: 8 }}>Anomalies detected</div>
+              {report.anomalies.map((a, i) => (
+                <div key={i} className="alert-row" style={{ border: '1px solid var(--line)', borderRadius: 6, marginBottom: 6 }}>
+                  <div className={`bar ${ALERT_SEVERITY_CLASS[a.severity] ?? 'ok'}`} />
+                  <div>
+                    <div className="title">{a.title}</div>
+                    <div className="meta">{a.description}</div>
                   </div>
-                ))}
-              </div>
+                </div>
+              ))}
             </div>
           )}
         </div>
@@ -365,84 +374,88 @@ export default function DashboardPage() {
   const recent = data?.recent ?? []
 
   return (
-    <div className="p-6 space-y-8">
-      <PageHeader title="Dashboard" description="Store performance and content pipeline." />
+    <div className="page">
+      {/* Page header */}
+      <div className="page-head">
+        <div>
+          <h1 className="page-title">Mission control</h1>
+          <div className="page-sub">Plasmaide · Growth telemetry across Shopify, DotDigital, Triple Whale, Xero and Gorgias.</div>
+        </div>
+      </div>
 
       {error && (
-        <div className="px-4 py-3 bg-red-50 border border-red-200 rounded-lg text-sm text-red-600">
+        <div className="err-banner">
           Failed to load metrics: {error}
         </div>
       )}
 
       {/* ── Row 1: Store Performance ──────────────────────────────────────── */}
-      <div>
-        <SectionLabel>Store Performance</SectionLabel>
+      <div style={{ marginBottom: 20 }}>
+        <div className="section-head">
+          <h2>Store performance</h2>
+        </div>
         <KPIDashboard brandId={brandId} />
       </div>
 
       {/* ── Row 2: Content Pipeline ───────────────────────────────────────── */}
-      <div>
-        <SectionLabel>Content Pipeline</SectionLabel>
-        <div className="grid grid-cols-2 lg:grid-cols-4 gap-4">
-          <KpiCard label="Generated" value={content ? fmtInt(content.total) : '—'} sub="all time" loading={loading} />
-          <KpiCard label="Pending Review" value={content ? fmtInt(content.pending) : '—'} sub="awaiting approval" loading={loading} />
-          <KpiCard label="Published" value={content ? fmtInt(content.published) : '—'} sub="live on store" loading={loading} />
-          <KpiCard label="Approval Rate" value={content ? `${content.approvalRate}%` : '—'} sub="approved + published / total" loading={loading} />
+      <div style={{ marginBottom: 20 }}>
+        <div className="section-head">
+          <h2>Content pipeline <span className="desc">· last 30 days</span></h2>
+          <Link href="/approvals/content" className="btn ghost">View all</Link>
+        </div>
+        <div className="stat-row mb-12">
+          <StatCell label="Generated"     value={content ? fmtInt(content.total) : '—'}              sub="all time"                    loading={loading} />
+          <StatCell label="Pending review" value={content ? fmtInt(content.pending) : '—'}            sub="awaiting approval"           loading={loading} color="var(--warn)" />
+          <StatCell label="Published"     value={content ? fmtInt(content.published) : '—'}           sub="live on store"               loading={loading} color="var(--ok)" />
+          <StatCell label="Approval rate" value={content ? `${content.approvalRate}%` : '—'}          sub="approved + published / total" loading={loading} />
         </div>
       </div>
 
       {/* ── Row 3: Recent content + Active alerts ─────────────────────────── */}
-      <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
-        <div className="rounded-lg" style={{ background: 'var(--surface)', border: '1px solid var(--border)' }}>
-          <div className="px-5 py-4 flex items-center justify-between" style={{ borderBottom: '1px solid var(--border-subtle)' }}>
-            <h3 className="text-sm font-medium" style={{ color: 'var(--text)' }}>Recent content</h3>
-            <Link href="/approvals/web-designer" className="text-xs text-indigo-600 hover:text-indigo-500">
-              View all →
-            </Link>
+      <div style={{ display: 'grid', gridTemplateColumns: '1fr 360px', gap: 16, marginBottom: 20 }}>
+        <div className="card">
+          <div className="card-head">
+            <h3>Recent content</h3>
+            <Link href="/approvals/content" className="btn ghost" style={{ fontSize: 11 }}>View all →</Link>
           </div>
-          <div>
-            {loading ? (
-              <div className="p-5 space-y-3">
-                {[1, 2, 3].map((i) => (
-                  <div key={i} className="flex items-center gap-3 animate-pulse">
-                    <div className="h-4 rounded flex-1" style={{ background: 'var(--border)' }} />
-                    <div className="h-4 rounded w-16" style={{ background: 'var(--border)' }} />
-                  </div>
-                ))}
-              </div>
-            ) : recent.length === 0 ? (
-              <p className="px-5 py-6 text-sm text-center" style={{ color: 'var(--text-muted)' }}>
-                No content yet.{' '}
-                <Link href="/content-studio" className="text-indigo-600 hover:text-indigo-500">Generate some →</Link>
-              </p>
-            ) : (
-              recent.map((item) => (
+          {loading ? (
+            <div className="card-body" style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
+              {[1, 2, 3].map((i) => (
+                <div key={i} style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
+                  <div className="skel" style={{ height: 16, flex: 1 }} />
+                  <div className="skel" style={{ height: 16, width: 60 }} />
+                </div>
+              ))}
+            </div>
+          ) : recent.length === 0 ? (
+            <div className="empty">
+              <div className="glyph">✎</div>
+              <div className="h">No content yet</div>
+              <p><Link href="/content-studio" style={{ color: 'var(--accent)' }}>Generate some →</Link></p>
+            </div>
+          ) : (
+            <div className="list">
+              {recent.map((item) => (
                 <Link
                   key={item.id}
-                  href="/approvals/web-designer"
-                  className="flex items-center gap-3 px-5 py-3 transition-colors group"
-                  style={{ borderTop: '1px solid var(--border-subtle)' }}
-                  onMouseEnter={e => { (e.currentTarget as HTMLElement).style.background = 'var(--bg)' }}
+                  href="/approvals/content"
+                  style={{ display: 'grid', gridTemplateColumns: '18px 1fr auto auto', gap: 10, alignItems: 'center', padding: 'var(--cell-pad)', borderBottom: '1px solid var(--line-2)', cursor: 'pointer', transition: 'background 120ms' }}
+                  onMouseEnter={e => { (e.currentTarget as HTMLElement).style.background = 'var(--panel-2)' }}
                   onMouseLeave={e => { (e.currentTarget as HTMLElement).style.background = '' }}
                 >
-                  <div className="flex-1 min-w-0">
-                    <p className="text-sm truncate transition-colors group-hover:text-indigo-600" style={{ color: 'var(--text)' }}>
+                  <span className="type-ico">{item.content_type[0].toUpperCase()}</span>
+                  <div style={{ minWidth: 0 }}>
+                    <div className="title" style={{ fontSize: 13, fontWeight: 500, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
                       {item.title ?? `${item.content_type.replace('_', ' ')} content`}
-                    </p>
-                    <p className="text-xs mt-0.5" style={{ color: 'var(--text-muted)' }}>
-                      {item.content_type.replace('_', ' ')} · {new Date(item.created_at).toLocaleDateString()}
-                    </p>
+                    </div>
+                    <div className="sub mono">{item.content_type.replace('_', ' ')} · {new Date(item.created_at).toLocaleDateString()}</div>
                   </div>
-                  <div className="flex items-center gap-1.5 flex-shrink-0">
-                    <ComplianceStatusBadge status={item.compliance_status} createdAt={item.created_at} />
-                    <span className={`text-xs font-medium px-2 py-0.5 rounded ${STATUS_STYLES[item.status] ?? 'bg-gray-100 text-gray-600'}`}>
-                      {item.status.replace('_', ' ')}
-                    </span>
-                  </div>
+                  <ComplianceStatusBadge status={item.compliance_status} createdAt={item.created_at} />
+                  <span className="chip mono">{item.status.replace('_', ' ')}</span>
                 </Link>
-              ))
-            )}
-          </div>
+              ))}
+            </div>
+          )}
         </div>
 
         <ActiveAlerts brandId={brandId} />

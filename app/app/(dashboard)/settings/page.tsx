@@ -4,7 +4,14 @@ import { useEffect, useRef, useState, useCallback } from 'react'
 import { createClient } from '@/lib/supabase/client'
 import { useBrand } from '@/context/BrandContext'
 import { PageHeader } from '@/components/PageHeader'
-import type { Brand, BrandSettings, BrandSettingsRow, ContentSchedule, IntegrationsConfig, Profile, UserRole } from '@/types'
+import type { Brand, BrandSettings, BrandSettingsRow, ContentSchedule, FYConfig, IntegrationsConfig, Profile, UserRole } from '@/types'
+import {
+  DEFAULT_FY_CONFIG,
+  FY_PRESETS,
+  getAllFiscalYears,
+  getCurrentFiscalYear,
+  getFiscalYearRangeLabel,
+} from '@/lib/utils/fiscal-year'
 
 // ─── Constants ────────────────────────────────────────────────────────────────
 
@@ -248,6 +255,107 @@ function ConnectedBadge({ connected }: { connected: boolean }) {
   )
 }
 
+// ─── Fiscal year section ──────────────────────────────────────────────────────
+
+const FY_TYPE_OPTIONS = [
+  { value: 'au', label: 'Australian (Jul – Jun)' },
+  { value: 'us', label: 'US / Calendar (Jan – Dec)' },
+  { value: 'uk', label: 'UK (Apr 6 – Apr 5)' },
+  { value: 'custom', label: 'Custom' },
+]
+
+function FYConfigSection({
+  fyConfig, onChange, save, onSave, readOnly,
+}: {
+  fyConfig: FYConfig
+  onChange: (c: FYConfig) => void
+  save: SectionSave
+  onSave: () => void
+  readOnly: boolean
+}) {
+  const currentFY = getCurrentFiscalYear(fyConfig)
+  const allFYs = getAllFiscalYears(fyConfig)
+  const rangeLabel = getFiscalYearRangeLabel(currentFY, fyConfig)
+
+  function handleTypeChange(type: string) {
+    if (type === 'custom') {
+      onChange({ ...fyConfig, type: 'custom' })
+    } else {
+      const preset = FY_PRESETS[type as keyof typeof FY_PRESETS]
+      onChange({ type: type as FYConfig['type'], ...preset })
+    }
+  }
+
+  return (
+    <Section
+      title="Fiscal Year"
+      description="Sets the financial year convention used in reporting and financial approvals."
+      save={save}
+      onSave={onSave}
+      readOnly={readOnly}
+    >
+      <div>
+        <Label>Convention</Label>
+        <SelectInput
+          value={fyConfig.type}
+          onChange={handleTypeChange}
+          options={FY_TYPE_OPTIONS}
+          disabled={readOnly}
+        />
+      </div>
+
+      {fyConfig.type === 'custom' && (
+        <div className="grid grid-cols-2 gap-4">
+          <div>
+            <Label>Start month (1–12)</Label>
+            <NumberInput
+              value={String(fyConfig.start_month)}
+              onChange={(v) => onChange({ ...fyConfig, start_month: Math.min(12, Math.max(1, parseInt(v) || 1)) })}
+              min={1} max={12} disabled={readOnly}
+            />
+          </div>
+          <div>
+            <Label>Start day (1–31)</Label>
+            <NumberInput
+              value={String(fyConfig.start_day)}
+              onChange={(v) => onChange({ ...fyConfig, start_day: Math.min(31, Math.max(1, parseInt(v) || 1)) })}
+              min={1} max={31} disabled={readOnly}
+            />
+          </div>
+          <div>
+            <Label>End month (1–12)</Label>
+            <NumberInput
+              value={String(fyConfig.end_month)}
+              onChange={(v) => onChange({ ...fyConfig, end_month: Math.min(12, Math.max(1, parseInt(v) || 12)) })}
+              min={1} max={12} disabled={readOnly}
+            />
+          </div>
+          <div>
+            <Label>End day (1–31)</Label>
+            <NumberInput
+              value={String(fyConfig.end_day)}
+              onChange={(v) => onChange({ ...fyConfig, end_day: Math.min(31, Math.max(1, parseInt(v) || 30)) })}
+              min={1} max={31} disabled={readOnly}
+            />
+          </div>
+        </div>
+      )}
+
+      <div className="rounded-md bg-gray-50 border border-gray-100 px-4 py-3 space-y-1.5">
+        <div className="flex items-center gap-2">
+          <span className="text-xs text-gray-400 font-medium w-24">Current FY</span>
+          <span className="text-sm font-semibold text-gray-900">{currentFY}</span>
+          <span className="text-xs text-gray-400">· {rangeLabel}</span>
+        </div>
+        <div className="flex items-center gap-2">
+          <span className="text-xs text-gray-400 font-medium w-24">Available FYs</span>
+          <span className="text-xs text-gray-600">{allFYs.join(', ')}</span>
+        </div>
+      </div>
+    </Section>
+  )
+}
+
 // ─── Defaults ─────────────────────────────────────────────────────────────────
 
 const CONFIG_DEFAULTS: BrandSettings = {
@@ -315,6 +423,10 @@ export default function SettingsPage() {
   const [inviteState, setInviteState] = useState<'idle' | 'sending' | 'sent' | 'error'>('idle')
   const [inviteError, setInviteError] = useState('')
 
+  // Fiscal year
+  const [fyConfig, setFyConfig] = useState<FYConfig>(DEFAULT_FY_CONFIG)
+  const [fyConfigSave, setFyConfigSave] = useState<SectionSave>({ state: 'idle', error: null })
+
   // Billing
   const [brandSettings, setBrandSettings] = useState<BrandSettingsRow | null>(null)
 
@@ -332,7 +444,7 @@ export default function SettingsPage() {
     saveTimers.current = []
 
     // Reset save states
-    for (const fn of [setBrandSave, setThresholdsSave, setReportSave, setCooSave, setScheduleSave, setAiSave, setIntegSave]) {
+    for (const fn of [setBrandSave, setThresholdsSave, setReportSave, setCooSave, setScheduleSave, setAiSave, setIntegSave, setFyConfigSave]) {
       fn({ state: 'idle', error: null })
     }
 
@@ -380,6 +492,7 @@ export default function SettingsPage() {
         triple_whale_shop_domain: (twInteg?.shop_domain as string | null) ?? '',
       })
       setTwTestState(twInteg?.api_key ? 'ok' : 'idle')
+      setFyConfig((s.fy_config as FYConfig) ?? DEFAULT_FY_CONFIG)
     }
 
     setUserRole((roleRes?.role as UserRole | undefined) ?? 'viewer')
@@ -515,6 +628,14 @@ export default function SettingsPage() {
     } catch (e) { afterSave(setIntegSave, e instanceof Error ? e.message : 'Save failed') }
   }
 
+  async function saveFYConfig() {
+    setFyConfigSave({ state: 'saving', error: null })
+    try {
+      await upsertBrandSettings({ fy_config: fyConfig } as Partial<BrandSettingsRow>)
+      afterSave(setFyConfigSave, null)
+    } catch (e) { afterSave(setFyConfigSave, e instanceof Error ? e.message : 'Save failed') }
+  }
+
   async function handleTestTripleWhale() {
     setTwTestState('testing')
     const res = await fetch('/api/integrations/triple-whale/test', {
@@ -606,37 +727,35 @@ export default function SettingsPage() {
   const visibleTabs = TABS.filter((t) => !('adminOnly' in t && t.adminOnly) || isAdmin)
 
   return (
-    <div className="p-6">
-      <PageHeader title="Settings" description="Brand configuration, integrations, and schedule." />
+    <div className="page">
+      <div className="page-head">
+        <div>
+          <h1 className="page-title">Settings</h1>
+          <div className="page-sub">Brand configuration, integrations, and schedule.</div>
+        </div>
+      </div>
 
       {/* Tabs */}
-      <div className="mt-6 border-b border-gray-200 overflow-x-auto">
-        <nav className="-mb-px flex gap-6 min-w-max">
-          {visibleTabs.map((tab) => (
-            <button
-              key={tab.id}
-              onClick={() => setActiveTab(tab.id)}
-              className={`pb-3 text-sm font-medium border-b-2 transition-colors whitespace-nowrap
-                ${activeTab === tab.id
-                  ? 'border-gray-900 text-gray-900'
-                  : 'border-transparent text-gray-400 hover:text-gray-600 hover:border-gray-300'}`}
-            >
-              {tab.label}
-            </button>
-          ))}
-        </nav>
+      <div className="set-tabs" style={{ overflowX: 'auto' }}>
+        {visibleTabs.map((tab) => (
+          <button
+            key={tab.id}
+            onClick={() => setActiveTab(tab.id)}
+            className={`set-tab${activeTab === tab.id ? ' on' : ''}`}
+          >
+            {tab.label}
+          </button>
+        ))}
       </div>
 
       {/* Fetch error */}
       {fetchError && (
-        <div className="mt-4 px-4 py-3 bg-red-50 border border-red-200 rounded-lg text-sm text-red-600">
-          {fetchError}
-        </div>
+        <div className="err-banner">{fetchError}</div>
       )}
 
       {/* Read-only notice for non-admins */}
       {isReadOnly && (
-        <div className="mt-4 px-4 py-2 bg-amber-50 border border-amber-200 rounded-lg text-xs text-amber-700">
+        <div style={{ padding: '8px 12px', background: 'var(--warn-bg)', border: '1px solid color-mix(in srgb, var(--warn) 25%, transparent)', borderRadius: 6, fontSize: 12, color: 'var(--warn)', marginBottom: 16 }}>
           You have {userRole} access — settings are read-only.
         </div>
       )}
@@ -646,27 +765,37 @@ export default function SettingsPage() {
         {/* ── Brand Profile ───────────────────────────────────────────────── */}
         {activeTab === 'brand' && (
           loading ? <SkeletonSection /> : (
-            <Section title="Brand Profile" description="Core identity used across the dashboard and in agent context." save={brandSave} onSave={saveBrandProfile} readOnly={isReadOnly}>
-              <div>
-                <Label>Brand name</Label>
-                <TextInput value={brandForm.name} onChange={(v) => setBrandForm((f) => ({ ...f, name: v }))} placeholder="Plasmaide" disabled={isReadOnly} />
-              </div>
-              <div>
-                <Label>Industry</Label>
-                <TextInput value={brandForm.industry} onChange={(v) => setBrandForm((f) => ({ ...f, industry: v }))} placeholder="Supplements" disabled={isReadOnly} />
-                <Hint>Used as context for agent prompts.</Hint>
-              </div>
-              <div>
-                <Label>Logo URL</Label>
-                <TextInput value={brandForm.logo_url} onChange={(v) => setBrandForm((f) => ({ ...f, logo_url: v }))} placeholder="https://..." type="url" disabled={isReadOnly} />
-                <Hint>Publicly accessible image URL.</Hint>
-              </div>
-              <div>
-                <Label>Brand ID</Label>
-                <TextInput value={activeBrand.brand_id} onChange={() => {}} disabled />
-                <Hint>Read-only. Primary key across all tables.</Hint>
-              </div>
-            </Section>
+            <>
+              <Section title="Brand Profile" description="Core identity used across the dashboard and in agent context." save={brandSave} onSave={saveBrandProfile} readOnly={isReadOnly}>
+                <div>
+                  <Label>Brand name</Label>
+                  <TextInput value={brandForm.name} onChange={(v) => setBrandForm((f) => ({ ...f, name: v }))} placeholder="Plasmaide" disabled={isReadOnly} />
+                </div>
+                <div>
+                  <Label>Industry</Label>
+                  <TextInput value={brandForm.industry} onChange={(v) => setBrandForm((f) => ({ ...f, industry: v }))} placeholder="Supplements" disabled={isReadOnly} />
+                  <Hint>Used as context for agent prompts.</Hint>
+                </div>
+                <div>
+                  <Label>Logo URL</Label>
+                  <TextInput value={brandForm.logo_url} onChange={(v) => setBrandForm((f) => ({ ...f, logo_url: v }))} placeholder="https://..." type="url" disabled={isReadOnly} />
+                  <Hint>Publicly accessible image URL.</Hint>
+                </div>
+                <div>
+                  <Label>Brand ID</Label>
+                  <TextInput value={activeBrand.brand_id} onChange={() => {}} disabled />
+                  <Hint>Read-only. Primary key across all tables.</Hint>
+                </div>
+              </Section>
+
+              <FYConfigSection
+                fyConfig={fyConfig}
+                onChange={setFyConfig}
+                save={fyConfigSave}
+                onSave={saveFYConfig}
+                readOnly={isReadOnly}
+              />
+            </>
           )
         )}
 

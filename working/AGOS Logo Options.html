@@ -1,0 +1,393 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>AGOS — Logo exploration</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Geist:wght@300;400;500;600;700&family=Geist+Mono:wght@400;500;600&display=swap" rel="stylesheet">
+<style>
+:root{
+  --bg:#f6f7f9; --panel:#fff; --panel-2:#fbfbfd;
+  --ink:#0b1220; --ink-2:#2a3346; --ink-3:#5c677d; --ink-4:#8a93a6; --ink-5:#b7bdcb;
+  --line:#e6e8ef; --line-2:#eef0f5; --line-3:#d8dbe4;
+  --nav:#0f1423; --nav-2:#161b2e; --nav-line:#252b41;
+  --nav-ink:#c9cde0; --nav-ink-2:#8a90a8; --nav-ink-3:#5b6282;
+  --accent:#2f6feb; --accent-bg:#eaf1ff; --accent-line:#c9dbff;
+  --ok:#0f8a5f;
+}
+*{box-sizing:border-box}
+html,body{margin:0;padding:0}
+body{font-family:'Geist',system-ui,sans-serif;color:var(--ink);background:var(--bg);-webkit-font-smoothing:antialiased;font-size:15px;line-height:1.55;padding:40px 0 80px}
+.mono{font-family:'Geist Mono',ui-monospace,monospace}
+.wrap{max-width:1200px;margin:0 auto;padding:0 32px}
+
+/* Page header */
+.page-hd{display:flex;align-items:flex-start;justify-content:space-between;gap:32px;margin-bottom:48px;flex-wrap:wrap}
+.page-hd h1{margin:0 0 8px;font-size:36px;letter-spacing:-0.025em;font-weight:500}
+.page-hd .lede{margin:0;font-size:15px;color:var(--ink-3);max-width:560px;line-height:1.55}
+.page-hd .brief{
+  font-size:12px;color:var(--ink-3);line-height:1.55;
+  border-left:2px solid var(--accent);padding:4px 16px;max-width:420px;background:var(--panel);
+}
+.page-hd .brief b{color:var(--ink)}
+
+/* Option card */
+.opt{
+  border:1px solid var(--line);border-radius:14px;background:var(--panel);
+  margin-bottom:20px;overflow:hidden;
+}
+.opt-hd{
+  display:flex;align-items:flex-start;gap:20px;padding:24px 28px;
+  border-bottom:1px solid var(--line);
+}
+.opt-hd .num{
+  font-family:'Geist Mono',monospace;font-size:11px;letter-spacing:.14em;color:var(--accent);
+  background:var(--accent-bg);border:1px solid var(--accent-line);padding:4px 10px;border-radius:16px;
+  height:fit-content;white-space:nowrap;
+}
+.opt-hd .title{font-size:22px;font-weight:500;letter-spacing:-0.015em;margin:0 0 6px}
+.opt-hd .sub{margin:0;font-size:13px;color:var(--ink-3);line-height:1.55;max-width:720px}
+.opt-hd .meta{margin-left:auto;text-align:right;font-size:10px;letter-spacing:.12em;color:var(--ink-4);font-family:'Geist Mono',monospace;text-transform:uppercase;flex:0 0 auto}
+
+/* Body: dark stage + light stage side by side */
+.opt-body{display:grid;grid-template-columns:1fr 1fr;gap:0}
+.stage{padding:40px 28px;display:flex;flex-direction:column;gap:28px;position:relative}
+.stage.dark{background:#0f1423;color:#fff;border-right:1px solid var(--line)}
+.stage.light{background:#fff}
+.stage-label{
+  position:absolute;top:10px;left:14px;
+  font-family:'Geist Mono',monospace;font-size:9px;letter-spacing:.14em;text-transform:uppercase;
+}
+.stage.dark .stage-label{color:var(--nav-ink-3)}
+.stage.light .stage-label{color:var(--ink-4)}
+
+.size-row{display:flex;align-items:center;gap:28px;flex-wrap:wrap}
+.size-row .sz-lab{
+  font-family:'Geist Mono',monospace;font-size:9px;letter-spacing:.14em;text-transform:uppercase;
+  width:52px;flex:0 0 52px;
+}
+.stage.dark .sz-lab{color:var(--nav-ink-3)}
+.stage.light .sz-lab{color:var(--ink-4)}
+
+/* Brand lockup (matches site) */
+.lockup{display:flex;align-items:center;gap:10px;font-weight:500;letter-spacing:-0.01em}
+.lockup.sz-xs{gap:7px;font-size:12px}
+.lockup.sz-sm{gap:10px;font-size:14px}
+.lockup.sz-md{gap:14px;font-size:22px}
+.lockup.sz-lg{gap:20px;font-size:36px}
+.lockup .kicker{font-family:'Geist Mono',monospace;font-size:10px;letter-spacing:.14em;text-transform:uppercase;font-weight:400;opacity:.5;margin-left:2px}
+
+/* App-level rows inside each option: favicon, nav, hero, footer usage */
+.usage{
+  display:grid;grid-template-columns:1fr 1fr;gap:0;
+  border-top:1px solid var(--line);background:var(--panel-2);
+}
+.usage-cell{padding:16px 20px;border-right:1px solid var(--line)}
+.usage-cell:last-child{border-right:0}
+.usage-cell .u-lab{font-family:'Geist Mono',monospace;font-size:9px;letter-spacing:.14em;text-transform:uppercase;color:var(--ink-4);margin-bottom:10px}
+
+/* Mini fake nav */
+.mini-nav{
+  background:rgba(15,20,35,0.92);border-radius:6px;height:44px;
+  display:flex;align-items:center;gap:16px;padding:0 14px;
+  box-shadow:0 0 0 1px var(--nav-line) inset;
+}
+.mini-nav .nav-dots{display:flex;gap:14px;margin-left:auto}
+.mini-nav .nav-dots span{color:var(--nav-ink-2);font-size:11px}
+
+/* Favicon box */
+.fav-row{display:flex;gap:18px;align-items:center}
+.fav-box{
+  width:48px;height:48px;border-radius:8px;border:1px solid var(--line);
+  background:#fff;display:grid;place-items:center;
+}
+.fav-box.sm{width:32px;height:32px;border-radius:6px}
+.fav-box.xs{width:16px;height:16px;border-radius:3px}
+
+/* Monochrome row */
+.mono-row{display:flex;gap:16px;align-items:center}
+.mono-chip{width:56px;height:56px;border-radius:8px;display:grid;place-items:center;flex:0 0 56px}
+.mono-chip.white{background:#fff;border:1px solid var(--line)}
+.mono-chip.black{background:#0b1220}
+.mono-chip.accent{background:var(--accent)}
+
+/* SVG placeholders sized by glyph component */
+
+@media (max-width:900px){
+  .opt-body{grid-template-columns:1fr}
+  .stage.dark{border-right:0;border-bottom:1px solid var(--line)}
+  .usage{grid-template-columns:1fr}
+  .usage-cell{border-right:0;border-bottom:1px solid var(--line)}
+}
+</style>
+</head>
+<body>
+
+<div class="wrap">
+  <div class="page-hd">
+    <div>
+      <div class="mono" style="font-size:11px;letter-spacing:.14em;color:var(--ink-4);text-transform:uppercase;margin-bottom:10px">Brand exploration · v1</div>
+      <h1>AGOS — logomark options</h1>
+      <p class="lede">Six directions for the AGOS wordmark + glyph. Each shown in dark nav, light hero, at favicon / nav / hero sizes, plus monochrome fallbacks. The current site uses a flat "A" in a blue‑to‑navy square — a strong starting point but generic; every option below keeps that 26×26 footprint and blue/navy palette.</p>
+    </div>
+    <div class="brief">
+      <b>Constraints.</b> Must read at 16px (favicon) and 26px (nav). Dark and light backgrounds. Default accent <span class="mono">#2f6feb</span>, navy <span class="mono">#0b1a3a</span>. Wordmark set in Geist Medium, tight tracking. Meaning to evoke: <i>a digital COO orchestrating twelve agents — systematic, compounding, auditable</i>.
+    </div>
+  </div>
+
+  <!-- Option container -->
+  <div id="options"></div>
+
+</div>
+
+<script>
+/* =========================================================
+   Logo glyph generators — each returns an SVG string at a
+   given size, on dark or light background context.
+   All use a 24×24 viewBox; the rounded bg square is drawn
+   by the wrapping div so masks render identically everywhere.
+   ========================================================= */
+
+const GLYPHS = {
+
+  /* 1 · ORBIT — Digital COO core + agent ring.
+     Core dot + 6 satellites on a dashed orbit.
+     Meaning: one operator orchestrating many agents. */
+  orbit(ctx){
+    const sat = [0,60,120,180,240,300].map(deg=>{
+      const r = (deg-90)*Math.PI/180;
+      return `<circle cx="${12+7.5*Math.cos(r)}" cy="${12+7.5*Math.sin(r)}" r="1.05" fill="${ctx.fg2}"/>`;
+    }).join('');
+    return `
+      <svg viewBox="0 0 24 24" width="100%" height="100%" fill="none">
+        <circle cx="12" cy="12" r="7.5" stroke="${ctx.fg3}" stroke-width="0.7" stroke-dasharray="1.2 1.6"/>
+        ${sat}
+        <circle cx="12" cy="12" r="3.2" fill="${ctx.fg}"/>
+        <circle cx="12" cy="12" r="1.3" fill="${ctx.accent}"/>
+      </svg>`;
+  },
+
+  /* 2 · GROWTH STEP — stepped bar chart that also reads as "A"
+     three ascending bars that form the shoulder of an A.
+     Meaning: compounding growth, step-function outcomes. */
+  growth(ctx){
+    return `
+      <svg viewBox="0 0 24 24" width="100%" height="100%" fill="none">
+        <rect x="3"  y="14" width="4" height="7"  rx="1" fill="${ctx.fg2}"/>
+        <rect x="10" y="9"  width="4" height="12" rx="1" fill="${ctx.fg2}"/>
+        <rect x="17" y="4"  width="4" height="17" rx="1" fill="${ctx.fg}"/>
+        <path d="M5 14 L12 9 L19 4" stroke="${ctx.accent}" stroke-width="1.4" stroke-linecap="round" stroke-linejoin="round" fill="none"/>
+        <circle cx="19" cy="4" r="1.6" fill="${ctx.accent}"/>
+      </svg>`;
+  },
+
+  /* 3 · APEX — Monolithic A built from routing lines.
+     Negative-space A made of two angled bars meeting at a node.
+     Meaning: peak / operating system — clean, architectural. */
+  apex(ctx){
+    return `
+      <svg viewBox="0 0 24 24" width="100%" height="100%" fill="none">
+        <path d="M5 20 L12 4 L19 20" stroke="${ctx.fg}" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" fill="none"/>
+        <path d="M8 14 L16 14" stroke="${ctx.fg}" stroke-width="2.2" stroke-linecap="round"/>
+        <circle cx="12" cy="4" r="2.2" fill="${ctx.accent}"/>
+      </svg>`;
+  },
+
+  /* 4 · SIGNAL — Stacked chevrons forming an upward A-arrow.
+     Three nested chevrons, accent on top.
+     Meaning: progression, signal, momentum. */
+  signal(ctx){
+    return `
+      <svg viewBox="0 0 24 24" width="100%" height="100%" fill="none" stroke-linecap="round" stroke-linejoin="round" stroke-width="2">
+        <path d="M4 20 L12 12 L20 20" stroke="${ctx.fg3}"/>
+        <path d="M4 15 L12 7 L20 15" stroke="${ctx.fg2}"/>
+        <path d="M4 10 L12 2 L20 10" stroke="${ctx.accent}"/>
+      </svg>`;
+  },
+
+  /* 5 · APERTURE — Concentric rings with a quarter-cut,
+     like a camera aperture or compass rose.
+     Meaning: focus, visibility, audit lens. */
+  aperture(ctx){
+    return `
+      <svg viewBox="0 0 24 24" width="100%" height="100%" fill="none">
+        <circle cx="12" cy="12" r="9" stroke="${ctx.fg3}" stroke-width="1.2"/>
+        <path d="M12 3 A9 9 0 0 1 21 12" stroke="${ctx.accent}" stroke-width="1.8" stroke-linecap="round" fill="none"/>
+        <circle cx="12" cy="12" r="5" stroke="${ctx.fg2}" stroke-width="1.2"/>
+        <circle cx="12" cy="12" r="2" fill="${ctx.fg}"/>
+      </svg>`;
+  },
+
+  /* 6 · GRID-A — A letter built from a 3×3 module grid.
+     Meaning: systematic, composable, os-like. Most literal. */
+  grida(ctx){
+    // filled cells forming an "A" on a 5×5 grid
+    const cells = [
+      [2,0],                // apex
+      [1,1],[3,1],
+      [1,2],[2,2],[3,2],    // crossbar
+      [0,3],[4,3],
+      [0,4],[4,4]
+    ];
+    const fills = cells.map(([x,y])=>{
+      const isApex = x===2 && y===0;
+      return `<rect x="${3+x*3.6}" y="${3+y*3.6}" width="2.8" height="2.8" rx="0.6" fill="${isApex?ctx.accent:ctx.fg}"/>`;
+    }).join('');
+    return `
+      <svg viewBox="0 0 24 24" width="100%" height="100%" fill="none">
+        ${fills}
+      </svg>`;
+  },
+
+};
+
+/* Context palettes for the glyph */
+function ctxFor(bg){
+  if (bg === 'dark') return {
+    bg:'linear-gradient(140deg,#2f6feb 0%,#0b1a3a 100%)',
+    fg:'#fff', fg2:'#b7ccff', fg3:'rgba(255,255,255,.28)', accent:'#fff',
+    wordColor:'#fff', kickerColor:'var(--nav-ink-3)',
+  };
+  if (bg === 'dark-plain') return {
+    bg:'#0f1423',
+    fg:'#fff', fg2:'#b7ccff', fg3:'rgba(255,255,255,.28)', accent:'#5a8cff',
+    wordColor:'#fff', kickerColor:'var(--nav-ink-3)',
+  };
+  if (bg === 'light') return {
+    bg:'#0f1423',  // glyph bg stays navy on light page for contrast
+    fg:'#fff', fg2:'#b7ccff', fg3:'rgba(255,255,255,.3)', accent:'#5a8cff',
+    wordColor:'var(--ink)', kickerColor:'var(--ink-4)',
+  };
+  if (bg === 'mono-white') return {
+    bg:'#fff', fg:'#0b1220', fg2:'#5c677d', fg3:'rgba(11,18,32,.25)', accent:'#0b1220',
+    wordColor:'#0b1220',
+  };
+  if (bg === 'mono-black') return {
+    bg:'#0b1220', fg:'#fff', fg2:'#8a93a6', fg3:'rgba(255,255,255,.25)', accent:'#fff',
+    wordColor:'#fff',
+  };
+  if (bg === 'mono-accent') return {
+    bg:'#2f6feb', fg:'#fff', fg2:'rgba(255,255,255,.7)', fg3:'rgba(255,255,255,.35)', accent:'#fff',
+    wordColor:'#fff',
+  };
+}
+
+/* Render a glyph box */
+function glyphBox(kind, size, bg){
+  const ctx = ctxFor(bg);
+  const radius = Math.max(3, size*0.22);
+  const shadow = (bg==='dark' || bg==='mono-accent') ? 'inset 0 0 0 1px rgba(255,255,255,.14)' : 'none';
+  return `<div style="width:${size}px;height:${size}px;border-radius:${radius}px;background:${ctx.bg};box-shadow:${shadow};flex:0 0 ${size}px;overflow:hidden;display:grid;place-items:center">${GLYPHS[kind](ctx)}</div>`;
+}
+
+/* Render a lockup: glyph + wordmark (+ optional kicker) */
+function lockup(kind, bg, size, opts={}){
+  const sizes = { xs:16, sm:26, md:40, lg:64 };
+  const px = sizes[size];
+  const ctx = ctxFor(bg);
+  const word = opts.word ?? true;
+  const kicker = opts.kicker ?? false;
+  return `
+    <div class="lockup sz-${size}" style="color:${ctx.wordColor}">
+      ${glyphBox(kind, px, bg)}
+      ${word ? `<span>AGOS</span>` : ''}
+      ${kicker ? `<span class="kicker" style="color:${ctx.kickerColor??'currentColor'}">Autonomous Growth OS</span>` : ''}
+    </div>`;
+}
+
+/* Mini nav preview */
+function miniNav(kind){
+  return `
+    <div class="mini-nav">
+      ${lockup(kind, 'dark', 'sm', { kicker:true })}
+      <div class="nav-dots"><span>Product</span><span>Pricing</span><span>Docs</span></div>
+    </div>`;
+}
+
+/* Favicon preview */
+function favicons(kind){
+  return `
+    <div class="fav-row">
+      <div class="fav-box xs">${glyphBox(kind, 16, 'dark')}</div>
+      <div class="fav-box sm">${glyphBox(kind, 32, 'dark')}</div>
+      <div class="fav-box">${glyphBox(kind, 48, 'dark')}</div>
+      <div style="font-size:10px;letter-spacing:.14em;color:var(--ink-4);font-family:'Geist Mono',monospace">16 · 32 · 48 PX</div>
+    </div>`;
+}
+
+/* Monochrome row */
+function monoRow(kind){
+  return `
+    <div class="mono-row">
+      <div class="mono-chip white">${glyphBox(kind, 40, 'mono-white')}</div>
+      <div class="mono-chip black">${glyphBox(kind, 40, 'mono-black')}</div>
+      <div class="mono-chip accent">${glyphBox(kind, 40, 'mono-accent')}</div>
+      <div style="font-size:10px;letter-spacing:.14em;color:var(--ink-4);font-family:'Geist Mono',monospace">LIGHT · DARK · ACCENT</div>
+    </div>`;
+}
+
+/* Full option card */
+function optionCard(n, kind, title, sub, meta){
+  return `
+    <div class="opt">
+      <div class="opt-hd">
+        <div class="num">OPTION ${String(n).padStart(2,'0')}</div>
+        <div style="flex:1">
+          <h2 class="title">${title}</h2>
+          <p class="sub">${sub}</p>
+        </div>
+        <div class="meta">${meta}</div>
+      </div>
+      <div class="opt-body">
+        <div class="stage dark">
+          <div class="stage-label">ON NAVY · HERO CTX</div>
+          <div class="size-row"><div class="sz-lab">GLYPH</div>${glyphBox(kind, 64, 'dark')}${glyphBox(kind, 40, 'dark')}${glyphBox(kind, 26, 'dark')}${glyphBox(kind, 16, 'dark')}</div>
+          <div class="size-row"><div class="sz-lab">NAV</div>${lockup(kind,'dark','sm',{kicker:true})}</div>
+          <div class="size-row"><div class="sz-lab">HERO</div>${lockup(kind,'dark','lg')}</div>
+        </div>
+        <div class="stage light">
+          <div class="stage-label">ON WHITE · MARKETING CTX</div>
+          <div class="size-row"><div class="sz-lab">GLYPH</div>${glyphBox(kind, 64, 'light')}${glyphBox(kind, 40, 'light')}${glyphBox(kind, 26, 'light')}${glyphBox(kind, 16, 'light')}</div>
+          <div class="size-row"><div class="sz-lab">HEAD</div>${lockup(kind,'light','md')}</div>
+          <div class="size-row"><div class="sz-lab">BODY</div>${lockup(kind,'light','sm',{kicker:true})}</div>
+        </div>
+      </div>
+      <div class="usage">
+        <div class="usage-cell">
+          <div class="u-lab">LIVE NAV CONTEXT</div>
+          ${miniNav(kind)}
+        </div>
+        <div class="usage-cell">
+          <div class="u-lab">FAVICON · 16 / 32 / 48</div>
+          ${favicons(kind)}
+        </div>
+        <div class="usage-cell">
+          <div class="u-lab">MONOCHROME FALLBACKS</div>
+          ${monoRow(kind)}
+        </div>
+        <div class="usage-cell">
+          <div class="u-lab">NOTES</div>
+          <div style="font-size:12px;color:var(--ink-3);line-height:1.55">${meta}</div>
+        </div>
+      </div>
+    </div>`;
+}
+
+/* ======= The six options ======= */
+const OPTS = [
+  { kind:'orbit',   title:'Orbit',        sub:'A bright core surrounded by six nodes on a dashed orbit — reads directly as the "digital COO + 12 agents" architecture the product actually is. Distinctive at 16px; reads as a hub at 64px+.', meta:'Concept: operator + ring of agents' },
+  { kind:'growth',  title:'Growth step',  sub:'Three stepped bars with a trend line pinned at a dot. Reads as compounding revenue AND doubles as the shoulder of an "A". Most on-the-nose for a growth product.', meta:'Concept: compounding step chart' },
+  { kind:'apex',    title:'Apex',         sub:'A monolithic "A" with a blue apex node — clean, architectural, feels like an OS mark. Most letter-forward option.', meta:'Concept: letter A as routing diagram' },
+  { kind:'signal',  title:'Signal',       sub:'Three nested chevrons, accent on top. Reads as momentum, progression, and — loosely — a stylised "A". Very distinctive silhouette at small sizes.', meta:'Concept: stacked chevrons / ascent' },
+  { kind:'aperture',title:'Aperture',     sub:'Concentric rings with a coloured quarter-arc. Feels auditable, lens-like, infrastructural — less growth-y, more platform-y. Good for Security/Docs surfaces.', meta:'Concept: aperture / audit lens' },
+  { kind:'grida',   title:'Grid‑A',       sub:'An "A" rendered as 10 rounded modules on a 5×5 grid, blue cap. Most "systems" / "OS" of the set. Slightly quieter than the others.', meta:'Concept: modular system grid' },
+];
+
+document.getElementById('options').innerHTML =
+  OPTS.map((o,i)=> optionCard(i+1, o.kind, o.title, o.sub, o.meta)).join('');
+</script>
+
+</body>
+</html>

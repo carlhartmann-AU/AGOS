@@ -147,6 +147,18 @@ export type AppEvent = {
   created_at: string
 }
 
+// ─── Fiscal year config ───────────────────────────────────────────────────────
+
+export type FYType = 'au' | 'us' | 'uk' | 'custom'
+
+export type FYConfig = {
+  type: FYType
+  start_month: number
+  start_day: number
+  end_month: number
+  end_day: number
+}
+
 // ─── New: brand_settings table ────────────────────────────────────────────────
 
 export type Plan = 'starter' | 'growth' | 'scale' | 'enterprise'
@@ -179,6 +191,7 @@ export type BrandSettingsRow = {
   llm_model: string
   llm_api_key_encrypted: string | null
   integrations: IntegrationsConfig
+  fy_config: FYConfig
   plan: Plan
   stripe_customer_id: string | null
   stripe_subscription_id: string | null

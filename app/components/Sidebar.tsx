@@ -3,37 +3,58 @@
 import Link from 'next/link'
 import { usePathname, useRouter } from 'next/navigation'
 import { createClient } from '@/lib/supabase/client'
-import { BrandSelector } from './BrandSelector'
 import type { User } from '@supabase/supabase-js'
 import type { UserRole } from '@/types'
 
-type NavItem =
-  | { href: string; label: string; roles?: UserRole[] }
-  | { label: string; children: { href: string; label: string; roles?: UserRole[] }[] }
+// ─── Icon SVGs ────────────────────────────────────────────────────────────────
 
-const NAV: NavItem[] = [
-  { href: '/dashboard', label: 'Dashboard' },
-  { href: '/content-studio', label: 'Content Studio', roles: ['admin', 'approver'] },
-  {
-    label: 'Approvals',
-    children: [
-      { href: '/approvals/content', label: 'Content' },
-      { href: '/approvals/web-designer', label: 'Web Designer' },
-      { href: '/approvals/financial', label: 'Financial', roles: ['admin'] },
-    ],
-  },
-  { href: '/performance', label: 'Performance' },
-  { href: '/coo', label: 'COO Interface', roles: ['admin'] },
-  { href: '/settings', label: 'Settings', roles: ['admin', 'approver'] },
-]
-
-function isVisible(item: { roles?: UserRole[] }, role: UserRole): boolean {
-  return !item.roles || item.roles.includes(role)
+function NavIcon({ name }: { name: string }) {
+  const props = { width: 14, height: 14, viewBox: '0 0 16 16', fill: 'none', stroke: 'currentColor', strokeWidth: 1.4, strokeLinecap: 'round' as const, strokeLinejoin: 'round' as const }
+  switch (name) {
+    case 'dash':     return <svg {...props}><rect x="2" y="2" width="5" height="5" rx="1"/><rect x="9" y="2" width="5" height="5" rx="1"/><rect x="2" y="9" width="5" height="5" rx="1"/><rect x="9" y="9" width="5" height="5" rx="1"/></svg>
+    case 'studio':   return <svg {...props}><path d="M3 3h10v8H3z"/><path d="M3 7l3-2 3 3 4-4"/></svg>
+    case 'approve':  return <svg {...props}><path d="M3 8l3 3 7-7"/><path d="M3 13h10"/></svg>
+    case 'perf':     return <svg {...props}><path d="M2 13h12"/><rect x="3" y="8" width="2" height="5"/><rect x="7" y="5" width="2" height="8"/><rect x="11" y="10" width="2" height="3"/></svg>
+    case 'fin':      return <svg {...props}><path d="M3 10h10M3 6h4M3 14h6"/><path d="M11 4v8M9 6l2-2 2 2"/></svg>
+    case 'coo':      return <svg {...props}><path d="M9 1L3 9h4l-1 6 6-8H8z"/></svg>
+    case 'settings': return <svg {...props}><circle cx="8" cy="8" r="2"/><path d="M8 1v3M8 12v3M1 8h3M12 8h3M3 3l2 2M11 11l2 2M3 13l2-2M11 5l2-2"/></svg>
+    case 'chev':     return <svg {...props}><path d="M4 6l4 4 4-4"/></svg>
+    default:         return null
+  }
 }
 
-const navBg: React.CSSProperties = { background: 'var(--nav-bg)', borderRight: '1px solid var(--nav-border)' }
-const navBorderB: React.CSSProperties = { borderBottom: '1px solid var(--nav-border)' }
-const navBorderT: React.CSSProperties = { borderTop: '1px solid var(--nav-border)' }
+function AgosGlyph() {
+  const sats = [0, 60, 120, 180, 240, 300].map((deg, i) => {
+    const r = (deg - 90) * Math.PI / 180
+    return <circle key={i} cx={12 + 7.5 * Math.cos(r)} cy={12 + 7.5 * Math.sin(r)} r="1.05" fill="#b7ccff" />
+  })
+  return (
+    <div style={{ width: 22, height: 22, borderRadius: 5, flexShrink: 0, background: 'linear-gradient(140deg,#2f6feb 0%,#0b1a3a 100%)', boxShadow: 'inset 0 0 0 1px rgba(255,255,255,.14)', display: 'grid', placeItems: 'center', overflow: 'hidden' }}>
+      <svg viewBox="0 0 24 24" width="100%" height="100%" fill="none">
+        <circle cx="12" cy="12" r="7.5" stroke="rgba(255,255,255,.28)" strokeWidth="0.7" strokeDasharray="1.2 1.6" />
+        {sats}
+        <circle cx="12" cy="12" r="3.2" fill="#fff" />
+        <circle cx="12" cy="12" r="1.3" fill="#2f6feb" />
+      </svg>
+    </div>
+  )
+}
+
+// ─── Nav items config ─────────────────────────────────────────────────────────
+
+type NavItem = { key: string; href: string; label: string; icon: string; roles?: UserRole[] }
+
+const NAV_ITEMS: NavItem[] = [
+  { key: 'dashboard',      href: '/dashboard',       label: 'Dashboard',       icon: 'dash' },
+  { key: 'content-studio', href: '/content-studio',  label: 'Content Studio',  icon: 'studio', roles: ['admin', 'approver'] },
+  { key: 'approvals',      href: '/approvals/content', label: 'Approvals',     icon: 'approve' },
+  { key: 'financial',      href: '/financial',        label: 'Financial',       icon: 'fin' },
+  { key: 'performance',    href: '/performance',     label: 'Performance',     icon: 'perf' },
+  { key: 'coo',            href: '/coo',             label: 'COO Interface',   icon: 'coo',  roles: ['admin'] },
+  { key: 'settings',       href: '/settings',        label: 'Settings',        icon: 'settings', roles: ['admin', 'approver'] },
+]
+
+// ─── Sidebar ──────────────────────────────────────────────────────────────────
 
 export function Sidebar({ user, role }: { user: User; role: UserRole }) {
   const pathname = usePathname()
@@ -50,106 +71,76 @@ export function Sidebar({ user, role }: { user: User; role: UserRole }) {
     return pathname === href || pathname.startsWith(href + '/')
   }
 
+  function isVisible(item: NavItem) {
+    return !item.roles || item.roles.includes(role)
+  }
+
+  const initials = (user.email ?? '?')
+    .split('@')[0]
+    .slice(0, 2)
+    .toUpperCase()
+
+  const displayName = user.user_metadata?.full_name ?? user.email?.split('@')[0] ?? 'User'
+
   return (
-    <aside style={navBg} className="w-56 flex-shrink-0 flex flex-col h-screen">
+    <aside className="nav">
       {/* Brand lockup */}
-      <div style={navBorderB} className="px-5 py-4 flex items-center gap-2.5">
-        <div className="w-6 h-6 rounded-md bg-indigo-600 flex items-center justify-center flex-shrink-0">
-          <span className="text-white text-xs font-bold leading-none">A</span>
+      <div className="nav-brand">
+        <div className="nav-brand-top">
+          <AgosGlyph />
+          <div className="stack" style={{ lineHeight: 1.1, gap: 2 }}>
+            <span style={{ fontSize: 12, letterSpacing: '-0.01em', color: '#fff', fontWeight: 500 }}>AGOS</span>
+            <span style={{ fontSize: 9, letterSpacing: '0.14em', color: 'var(--nav-ink-3)', textTransform: 'uppercase' }}>AUTONOMOUS GROWTH OS</span>
+          </div>
         </div>
-        <span style={{ color: 'var(--nav-text-active)' }} className="font-semibold text-sm tracking-tight">
-          AGOS
-        </span>
+        <div className="brand-switcher">
+          <div className="brand-mark">Pl</div>
+          <div className="stack" style={{ flex: 1, minWidth: 0 }}>
+            <div className="brand-name">Plasmaide</div>
+            <div className="brand-sub mono">AU · PRIMARY BRAND</div>
+          </div>
+          <span className="caret"><NavIcon name="chev" /></span>
+        </div>
       </div>
 
-      {/* Brand selector */}
-      <div style={navBorderB} className="py-1">
-        <BrandSelector />
-      </div>
-
-      {/* Navigation */}
-      <nav className="flex-1 px-2 py-3 overflow-y-auto space-y-0.5">
-        {NAV.map((item) => {
-          if ('children' in item) {
-            const visibleChildren = item.children.filter((c) => isVisible(c, role))
-            if (visibleChildren.length === 0) return null
-            const parentActive = visibleChildren.some((c) => isActive(c.href))
-            return (
-              <div key={item.label} className="pt-3 first:pt-0">
-                <span
-                  className="block px-3 mb-1 text-[10px] font-semibold uppercase tracking-widest"
-                  style={{ color: parentActive ? 'var(--nav-text-active)' : 'var(--nav-text)', opacity: 0.5 }}
-                >
-                  {item.label}
-                </span>
-                <div className="space-y-0.5">
-                  {visibleChildren.map((child) => {
-                    const active = isActive(child.href)
-                    return (
-                      <Link
-                        key={child.href}
-                        href={child.href}
-                        style={{
-                          background: active ? 'var(--nav-item-active)' : undefined,
-                          color: active ? 'var(--nav-text-active)' : 'var(--nav-text)',
-                        }}
-                        className="flex items-center px-3 py-1.5 text-sm rounded-md transition-colors hover:bg-white/5 hover:text-white"
-                      >
-                        {child.label}
-                      </Link>
-                    )
-                  })}
-                </div>
-              </div>
-            )
-          }
-
-          if (!isVisible(item, role)) return null
-
-          const active = isActive(item.href!)
+      {/* Workspace section */}
+      <div className="nav-section-label">Workspace</div>
+      <div className="nav-items">
+        {NAV_ITEMS.filter(isVisible).map((item) => {
+          const active = isActive(item.href)
           return (
             <Link
-              key={item.href}
-              href={item.href!}
-              style={{
-                background: active ? 'var(--nav-item-active)' : undefined,
-                color: active ? 'var(--nav-text-active)' : 'var(--nav-text)',
-              }}
-              className="flex items-center px-3 py-2 text-sm rounded-md font-medium transition-colors hover:bg-white/5 hover:text-white"
+              key={item.key}
+              href={item.href}
+              className={`nav-item${active ? ' active' : ''}`}
             >
-              {item.label}
+              <NavIcon name={item.icon} />
+              <span>{item.label}</span>
             </Link>
           )
         })}
-      </nav>
+      </div>
 
-      {/* User footer */}
-      <div style={navBorderT} className="px-3 py-3">
-        <div className="flex items-center gap-2 px-1 mb-2">
-          <div className="w-6 h-6 rounded-full bg-indigo-700 flex items-center justify-center flex-shrink-0">
-            <span className="text-white text-[10px] font-semibold">
-              {(user.email?.[0] ?? '?').toUpperCase()}
-            </span>
+      {/* Footer */}
+      <div className="nav-footer">
+        <div className="nav-user">
+          <div className="avatar">{initials}</div>
+          <div className="stack" style={{ flex: 1, minWidth: 0 }}>
+            <div style={{ color: '#f0f2fa', fontSize: 12, fontWeight: 500, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{displayName}</div>
+            <div className="mono" style={{ color: 'var(--nav-ink-3)', fontSize: 10, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', textTransform: 'uppercase' }}>
+              {role} · {user.email}
+            </div>
           </div>
-          <p className="text-xs truncate flex-1" style={{ color: 'var(--nav-text)' }}>
-            {user.email}
-          </p>
-          <span
-            className="text-[10px] px-1.5 py-0.5 rounded font-semibold flex-shrink-0"
-            style={{
-              background: role === 'admin' ? 'rgba(99,102,241,0.25)' : 'rgba(255,255,255,0.08)',
-              color: role === 'admin' ? '#a5b4fc' : 'var(--nav-text)',
-            }}
-          >
-            {role}
-          </span>
+        </div>
+        <div className="nav-sync">
+          <span className="mono">LAST SYNC · 18h ago</span>
+          <span className="pulse" />
         </div>
         <button
           onClick={handleSignOut}
-          className="w-full text-left text-xs px-1 transition-colors"
-          style={{ color: 'var(--nav-text)', opacity: 0.6 }}
-          onMouseEnter={e => { (e.target as HTMLElement).style.opacity = '1' }}
-          onMouseLeave={e => { (e.target as HTMLElement).style.opacity = '0.6' }}
+          style={{ marginTop: 8, padding: '4px 4px', fontSize: 11, color: 'var(--nav-ink-3)', background: 'transparent', border: 0, textAlign: 'left', transition: 'color 120ms', width: '100%' }}
+          onMouseEnter={e => { (e.target as HTMLElement).style.color = 'var(--nav-ink)' }}
+          onMouseLeave={e => { (e.target as HTMLElement).style.color = 'var(--nav-ink-3)' }}
         >
           Sign out
         </button>

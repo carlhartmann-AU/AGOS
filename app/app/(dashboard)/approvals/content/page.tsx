@@ -3,23 +3,21 @@
 import { useEffect, useState } from 'react'
 import { createClient } from '@/lib/supabase/client'
 import { useBrand } from '@/context/BrandContext'
-import { PageHeader } from '@/components/PageHeader'
 import { ContentApprovalCard } from '@/components/ContentApprovalCard'
 import { PublishConfirmCard } from '@/components/PublishConfirmCard'
 import type { ContentQueueItem } from '@/types'
 
 function SkeletonCard() {
   return (
-    <div className="rounded-lg p-5 animate-pulse space-y-3" style={{ background: 'var(--surface)', border: '1px solid var(--border)' }}>
-      <div className="flex gap-2">
-        <div className="h-5 rounded w-16" style={{ background: 'var(--border)' }} />
-        <div className="h-5 rounded w-20" style={{ background: 'var(--border)' }} />
+    <div className="card" style={{ padding: 16 }}>
+      <div style={{ display: 'flex', gap: 8, marginBottom: 8 }}>
+        <div className="skel" style={{ height: 20, width: 60 }} />
+        <div className="skel" style={{ height: 20, width: 80 }} />
       </div>
-      <div className="h-4 rounded w-2/3" style={{ background: 'var(--border)' }} />
-      <div className="space-y-1.5">
-        <div className="h-3 rounded w-full" style={{ background: 'var(--border)' }} />
-        <div className="h-3 rounded w-5/6" style={{ background: 'var(--border)' }} />
-        <div className="h-3 rounded w-4/6" style={{ background: 'var(--border)' }} />
+      <div className="skel" style={{ height: 14, width: '60%', marginBottom: 10 }} />
+      <div style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
+        <div className="skel" style={{ height: 12 }} />
+        <div className="skel" style={{ height: 12, width: '80%' }} />
       </div>
     </div>
   )
@@ -197,32 +195,46 @@ export default function ContentApprovalsPage() {
 
   if (!activeBrand) {
     return (
-      <div className="p-6">
-        <PageHeader
-          title="Content Approvals"
-          description="Review and approve content before it publishes."
-        />
-        <div className="mt-6 rounded-lg px-5 py-10 text-center text-sm" style={{ background: 'var(--surface)', border: '1px solid var(--border)', color: 'var(--text-muted)' }}>
-          Select a brand to view the approval queue.
+      <div className="page">
+        <div className="page-head">
+          <div>
+            <h1 className="page-title">Content Approvals</h1>
+            <div className="page-sub">Review and approve content before it publishes.</div>
+          </div>
+        </div>
+        <div className="card">
+          <div className="empty">
+            <div className="glyph">◎</div>
+            <div className="h">No brand selected</div>
+            <p>Select a brand to view the approval queue.</p>
+          </div>
         </div>
       </div>
     )
   }
 
   return (
-    <div className="p-6">
-      <PageHeader
-        title="Content Approvals"
-        description="Review and approve content before it publishes."
-      />
+    <div className="page">
+      <div className="page-head">
+        <div>
+          <h1 className="page-title">Content Approvals</h1>
+          <div className="page-sub">Review and approve content before it publishes.</div>
+        </div>
+        <div className="page-meta">
+          <span className="chip mono">
+            <span className="dot" />
+            {loading ? '…' : pendingItems.length} pending
+          </span>
+        </div>
+      </div>
 
-      <div className="mt-6 space-y-8">
-        {/* Publish confirmation section — shown when items are approved but not yet confirmed */}
-        {confirmingItems.length > 0 && (
-          <section className="space-y-3">
-            <h2 className="text-xs font-semibold text-gray-500 uppercase tracking-wide">
-              Awaiting publish confirmation ({confirmingItems.length})
-            </h2>
+      {/* Publish confirmation section */}
+      {confirmingItems.length > 0 && (
+        <div style={{ marginBottom: 20 }}>
+          <div className="section-head">
+            <h2>Awaiting publish confirmation <span className="desc">· {confirmingItems.length}</span></h2>
+          </div>
+          <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
             {confirmingItems.map((item) => (
               <PublishConfirmCard
                 key={item.id}
@@ -231,49 +243,46 @@ export default function ContentApprovalsPage() {
                 onCancel={() => handleCancelPublish(item.id)}
               />
             ))}
-          </section>
+          </div>
+        </div>
+      )}
+
+      {/* Pending approval section */}
+      <div>
+        <div className="section-head">
+          <h2>Pending approval</h2>
+        </div>
+
+        {fetchError && (
+          <div className="err-banner">{fetchError}</div>
         )}
 
-        {/* Pending approval section */}
-        <section className="space-y-3">
-          <div className="flex items-center justify-between">
-            <h2 className="text-xs font-semibold text-gray-500 uppercase tracking-wide">
-              Pending approval
-            </h2>
-            <span className="text-xs px-2 py-0.5 rounded-full" style={{ background: 'var(--bg)', color: 'var(--text-muted)' }}>
-              {loading ? '…' : pendingItems.length}
-            </span>
+        {loading ? (
+          <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
+            <SkeletonCard />
+            <SkeletonCard />
           </div>
-
-          {fetchError && (
-            <div className="bg-red-50 border border-red-200 rounded-lg px-4 py-3 text-sm text-red-600">
-              {fetchError}
+        ) : pendingItems.length === 0 ? (
+          <div className="card">
+            <div className="empty">
+              <div className="glyph">✓</div>
+              <div className="h">Queue empty</div>
+              <p>No content awaiting approval for {activeBrand.name}.</p>
             </div>
-          )}
-
-          {loading ? (
-            <div className="space-y-3">
-              <SkeletonCard />
-              <SkeletonCard />
-            </div>
-          ) : pendingItems.length === 0 ? (
-            <div className="rounded-lg px-5 py-10 text-center text-sm" style={{ background: 'var(--surface)', border: '1px solid var(--border)', color: 'var(--text-muted)' }}>
-              No content awaiting approval for {activeBrand.name}.
-            </div>
-          ) : (
-            <div className="space-y-3">
-              {pendingItems.map((item) => (
-                <ContentApprovalCard
-                  key={item.id}
-                  item={item}
-                  onApprove={() => handleApprove(item)}
-                  onReject={() => handleReject(item.id)}
-                  onEdit={handleEdit}
-                />
-              ))}
-            </div>
-          )}
-        </section>
+          </div>
+        ) : (
+          <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
+            {pendingItems.map((item) => (
+              <ContentApprovalCard
+                key={item.id}
+                item={item}
+                onApprove={() => handleApprove(item)}
+                onReject={() => handleReject(item.id)}
+                onEdit={handleEdit}
+              />
+            ))}
+          </div>
+        )}
       </div>
     </div>
   )

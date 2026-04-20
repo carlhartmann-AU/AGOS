@@ -1,11 +1,18 @@
 'use client'
 
-import { useEffect, useState } from 'react'
+import { useCallback, useEffect, useState } from 'react'
 import { createClient } from '@/lib/supabase/client'
 import { useBrand } from '@/context/BrandContext'
 import { PageHeader } from '@/components/PageHeader'
 import { FinancialApprovalCard } from '@/components/FinancialApprovalCard'
-import type { FinancialQueueItem } from '@/types'
+import {
+  DEFAULT_FY_CONFIG,
+  getAllFiscalYears,
+  getCurrentFiscalYear,
+  getFiscalYearRange,
+  getFiscalYearRangeLabel,
+} from '@/lib/utils/fiscal-year'
+import type { FYConfig, FinancialQueueItem } from '@/types'
 
 function SkeletonCard() {
   return (
@@ -31,38 +38,78 @@ export default function FinancialApprovalsPage() {
   const { activeBrand } = useBrand()
   const supabase = createClient()
 
+  const [fyConfig, setFyConfig] = useState<FYConfig>(DEFAULT_FY_CONFIG)
+  const [fyOptions, setFyOptions] = useState<string[]>([])
+  const [selectedFY, setSelectedFY] = useState<string>('')
+
   const [items, setItems] = useState<FinancialQueueItem[]>([])
   const [loading, setLoading] = useState(true)
   const [fetchError, setFetchError] = useState<string | null>(null)
 
+  // Load fy_config from brand_settings when brand changes
   useEffect(() => {
-    if (!activeBrand) {
-      setLoading(false)
-      return
-    }
+    if (!activeBrand) return
+    supabase
+      .from('brand_settings')
+      .select('fy_config')
+      .eq('brand_id', activeBrand.brand_id)
+      .single()
+      .then(({ data }) => {
+        const cfg: FYConfig = data?.fy_config ?? DEFAULT_FY_CONFIG
+        setFyConfig(cfg)
+        const opts = getAllFiscalYears(cfg)
+        setFyOptions(opts)
+        setSelectedFY(getCurrentFiscalYear(cfg))
+      })
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [activeBrand?.brand_id])
 
-    const brandId = activeBrand.brand_id
+  // Re-derive options when fyConfig changes (e.g., after settings save)
+  useEffect(() => {
+    if (!fyConfig) return
+    const opts = getAllFiscalYears(fyConfig)
+    setFyOptions(opts)
+    setSelectedFY((prev) => (opts.includes(prev) ? prev : opts[0]))
+  }, [fyConfig])
 
+  const fetchItems = useCallback(async (brandId: string, fy: string, cfg: FYConfig) => {
+    if (!fy) return
     setLoading(true)
     setFetchError(null)
 
-    // Initial fetch
-    supabase
+    const { start, end } = getFiscalYearRange(fy, cfg)
+    // Include end of the final day
+    const endOfDay = new Date(end)
+    endOfDay.setHours(23, 59, 59, 999)
+
+    const { data, error } = await supabase
       .from('financial_queue')
       .select('*')
       .eq('brand_id', brandId)
       .eq('status', 'pending')
+      .gte('created_at', start.toISOString())
+      .lte('created_at', endOfDay.toISOString())
       .order('created_at', { ascending: false })
-      .then(({ data, error }) => {
-        if (error) {
-          setFetchError(error.message)
-        } else {
-          setItems(data ?? [])
-        }
-        setLoading(false)
-      })
 
-    // Real-time subscription — filter by brand_id, manage status client-side
+    if (error) {
+      setFetchError(error.message)
+    } else {
+      setItems(data ?? [])
+    }
+    setLoading(false)
+  }, [supabase]) // eslint-disable-line react-hooks/exhaustive-deps
+
+  // Fetch items when brand, FY, or config changes
+  useEffect(() => {
+    if (!activeBrand || !selectedFY) return
+    fetchItems(activeBrand.brand_id, selectedFY, fyConfig)
+  }, [activeBrand?.brand_id, selectedFY, fyConfig, fetchItems]) // eslint-disable-line react-hooks/exhaustive-deps
+
+  // Real-time subscription for the current brand (client-side FY filter)
+  useEffect(() => {
+    if (!activeBrand) return
+    const brandId = activeBrand.brand_id
+
     const channel = supabase
       .channel(`financial_queue:${brandId}`)
       .on(
@@ -74,9 +121,19 @@ export default function FinancialApprovalsPage() {
           filter: `brand_id=eq.${brandId}`,
         },
         (payload) => {
+          if (!selectedFY || !fyConfig) return
+          const { start, end } = getFiscalYearRange(selectedFY, fyConfig)
+          const endOfDay = new Date(end)
+          endOfDay.setHours(23, 59, 59, 999)
+
+          function inFY(item: FinancialQueueItem) {
+            const t = new Date(item.created_at)
+            return t >= start && t <= endOfDay
+          }
+
           if (payload.eventType === 'INSERT') {
             const item = payload.new as FinancialQueueItem
-            if (item.status === 'pending') {
+            if (item.status === 'pending' && inFY(item)) {
               setItems((prev) => [item, ...prev])
             }
           } else if (payload.eventType === 'UPDATE') {
@@ -94,11 +151,9 @@ export default function FinancialApprovalsPage() {
       )
       .subscribe()
 
-    return () => {
-      supabase.removeChannel(channel)
-    }
+    return () => { supabase.removeChannel(channel) }
   // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [activeBrand?.brand_id])
+  }, [activeBrand?.brand_id, selectedFY, fyConfig])
 
   async function handleApprove(item: FinancialQueueItem) {
     const {
@@ -115,8 +170,6 @@ export default function FinancialApprovalsPage() {
       .eq('id', item.id)
 
     if (error) throw error
-
-    // Optimistic removal — real-time UPDATE will also fire
     setItems((prev) => prev.filter((p) => p.id !== item.id))
   }
 
@@ -127,14 +180,16 @@ export default function FinancialApprovalsPage() {
       .eq('id', id)
 
     if (error) throw error
-
     setItems((prev) => prev.filter((p) => p.id !== id))
   }
 
   function handleRequestDetail() {
-    // Phase 5+ — re-invokes CFO Agent for deeper analysis via COO
     alert('Request Detail will re-invoke the CFO Agent for deeper analysis. Available in a future phase.')
   }
+
+  const rangeLabel = selectedFY && fyConfig
+    ? getFiscalYearRangeLabel(selectedFY, fyConfig)
+    : ''
 
   if (!activeBrand) {
     return (
@@ -152,10 +207,32 @@ export default function FinancialApprovalsPage() {
 
   return (
     <div className="p-6">
-      <PageHeader
-        title="Financial Approvals"
-        description="Review and approve financial actions before execution."
-      />
+      {/* Header with FY selector */}
+      <div className="flex items-start justify-between gap-4 flex-wrap">
+        <PageHeader
+          title="Financial Approvals"
+          description={
+            selectedFY
+              ? `${selectedFY} · ${rangeLabel}`
+              : 'Review and approve financial actions before execution.'
+          }
+        />
+        {fyOptions.length > 0 && (
+          <div className="flex items-center gap-2 flex-shrink-0">
+            <span className="text-xs text-gray-400 font-medium">Fiscal year</span>
+            <select
+              value={selectedFY}
+              onChange={(e) => setSelectedFY(e.target.value)}
+              className="text-sm border border-gray-200 rounded-md px-2.5 py-1.5 bg-white text-gray-700
+                         focus:outline-none focus:ring-2 focus:ring-gray-900 transition"
+            >
+              {fyOptions.map((fy) => (
+                <option key={fy} value={fy}>{fy}</option>
+              ))}
+            </select>
+          </div>
+        )}
+      </div>
 
       {/* High-stakes notice */}
       <div className="mt-4 px-4 py-3 bg-amber-50 border border-amber-200 rounded-lg flex items-start gap-3">
@@ -190,7 +267,8 @@ export default function FinancialApprovalsPage() {
           </div>
         ) : items.length === 0 ? (
           <div className="bg-white rounded-lg border border-gray-200 px-5 py-10 text-center text-sm text-gray-400">
-            No financial actions awaiting approval for {activeBrand.name}.
+            No financial actions awaiting approval for {activeBrand.name}
+            {selectedFY ? ` in ${selectedFY}` : ''}.
           </div>
         ) : (
           <div className="space-y-3">

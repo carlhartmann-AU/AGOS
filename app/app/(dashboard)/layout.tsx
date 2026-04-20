@@ -3,6 +3,7 @@ import { createClient } from '@/lib/supabase/server'
 import { createAdminClient } from '@/lib/supabase/admin'
 import { BrandProvider } from '@/context/BrandContext'
 import { Sidebar } from '@/components/Sidebar'
+import { MobileMenuButton } from '@/components/MobileMenuButton'
 import type { Brand, UserRole } from '@/types'
 
 export default async function DashboardLayout({
@@ -36,11 +37,14 @@ export default async function DashboardLayout({
 
   return (
     <BrandProvider brands={accessibleBrands}>
-      <div className="flex h-screen" style={{ background: 'var(--bg)' }}>
+      <div className="app">
+        <MobileMenuButton />
         <Sidebar user={user} role={role} />
-        <main className="flex-1 overflow-y-auto px-8 py-6">
-          {children}
-        </main>
+        <div className="app-main">
+          <main style={{ flex: 1, overflowY: 'auto' }}>
+            {children}
+          </main>
+        </div>
       </div>
     </BrandProvider>
   )

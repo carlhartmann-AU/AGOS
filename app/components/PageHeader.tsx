@@ -7,10 +7,8 @@ export function PageHeader({
 }) {
   return (
     <div>
-      <h1 className="text-xl font-semibold text-gray-900">{title}</h1>
-      {description && (
-        <p className="mt-1 text-sm text-gray-500">{description}</p>
-      )}
+      <h1 className="page-title">{title}</h1>
+      {description && <p className="page-sub">{description}</p>}
     </div>
   )
 }
