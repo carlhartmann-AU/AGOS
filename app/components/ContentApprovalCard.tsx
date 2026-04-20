@@ -1,7 +1,9 @@
 'use client'
 
 import { useState } from 'react'
-import type { ContentQueueItem, ComplianceViolation } from '@/types'
+import { createClient } from '@/lib/supabase/client'
+import type { ContentQueueItem } from '@/types'
+import type { RuleResult } from '@/types/compliance'
 
 const CONTENT_TYPE_LABELS: Record<string, string> = {
   email: 'Email',
@@ -27,50 +29,167 @@ function formatRelativeTime(date: string): string {
   return `${Math.floor(hours / 24)}d ago`
 }
 
-function ComplianceBadge({ result }: { result: 'PASS' | 'FAIL' | 'ESCALATE' }) {
-  const styles = {
-    PASS: 'bg-green-50 text-green-700 border-green-200',
-    FAIL: 'bg-red-50 text-red-700 border-red-200',
-    ESCALATE: 'bg-amber-50 text-amber-700 border-amber-200',
+// ─── Compliance status badge (new engine) ─────────────────────────────────────
+
+const COMPLIANCE_STATUS_STYLES: Record<string, string> = {
+  passed:   'bg-green-50 text-green-700 border-green-200',
+  warnings: 'bg-amber-50 text-amber-700 border-amber-200',
+  escalated:'bg-orange-50 text-orange-700 border-orange-200',
+  blocked:  'bg-red-50 text-red-700 border-red-200',
+}
+
+const COMPLIANCE_STATUS_LABELS: Record<string, string> = {
+  passed:   '✓ Passed',
+  warnings: '⚠ Warnings',
+  escalated:'⚡ Escalated',
+  blocked:  '✗ Blocked',
+}
+
+function ComplianceStatusBadge({ status }: { status: string | null | undefined }) {
+  if (!status || status === 'pending') {
+    return (
+      <span className="inline-flex items-center px-2 py-0.5 rounded border text-xs font-medium bg-gray-50 text-gray-500 border-gray-200 animate-pulse">
+        Checking…
+      </span>
+    )
   }
-  const labels = { PASS: '✓ Compliant', FAIL: '✗ Violations', ESCALATE: '⚠ Escalated' }
+  const style = COMPLIANCE_STATUS_STYLES[status] ?? 'bg-gray-50 text-gray-500 border-gray-200'
+  const label = COMPLIANCE_STATUS_LABELS[status] ?? status
   return (
-    <span
-      className={`inline-flex items-center px-2 py-0.5 rounded border text-xs font-medium ${styles[result]}`}
-    >
-      {labels[result]}
+    <span className={`inline-flex items-center px-2 py-0.5 rounded border text-xs font-medium ${style}`}>
+      {label}
     </span>
   )
 }
 
-function ViolationRow({ v }: { v: ComplianceViolation }) {
-  const isCritical = v.severity === 'critical'
+// ─── Severity badge ───────────────────────────────────────────────────────────
+
+function SeverityBadge({ severity }: { severity: string }) {
+  const styles: Record<string, string> = {
+    minor:    'bg-yellow-100 text-yellow-700',
+    major:    'bg-orange-100 text-orange-700',
+    critical: 'bg-red-100 text-red-700',
+  }
   return (
-    <div
-      className={`p-3 rounded-md text-xs space-y-1.5 ${isCritical ? 'bg-red-50' : 'bg-amber-50'}`}
-    >
-      <div className="flex items-center justify-between">
-        <span
-          className={`font-semibold capitalize ${isCritical ? 'text-red-700' : 'text-amber-700'}`}
-        >
-          {v.check.replace('_', ' ')} &middot; {v.severity}
+    <span className={`text-xs font-medium px-1.5 py-0.5 rounded capitalize ${styles[severity] ?? 'bg-gray-100 text-gray-600'}`}>
+      {severity}
+    </span>
+  )
+}
+
+// ─── Rule result row ──────────────────────────────────────────────────────────
+
+function RuleResultRow({ r }: { r: RuleResult }) {
+  const [showFix, setShowFix] = useState(false)
+  return (
+    <div className={`p-3 rounded-md text-xs space-y-1.5 ${r.passed ? 'bg-green-50' : r.severity === 'critical' ? 'bg-red-50' : r.severity === 'major' ? 'bg-orange-50' : 'bg-yellow-50'}`}>
+      <div className="flex items-center gap-2 flex-wrap">
+        <span className={`font-semibold ${r.passed ? 'text-green-700' : 'text-gray-800'}`}>
+          {r.passed ? '✓' : '✗'} {r.rule_name}
         </span>
-        <span className="text-gray-400">{v.rule_reference}</span>
+        <SeverityBadge severity={r.severity} />
+        {r.auto_fixed && (
+          <span className="bg-blue-100 text-blue-700 px-1.5 py-0.5 rounded text-xs font-medium">Auto-fixed</span>
+        )}
+        {r.matches && r.matches.length > 0 && (
+          <span className="text-gray-500">matched: {r.matches.slice(0, 3).join(', ')}{r.matches.length > 3 ? '…' : ''}</span>
+        )}
       </div>
-      <p className="text-gray-500">{v.location}</p>
-      <div className="grid grid-cols-2 gap-3">
+      <p className="text-gray-600">{r.explanation}</p>
+      {r.suggested_fix && (
         <div>
-          <span className="block text-gray-400 mb-0.5">Original</span>
-          <span className="text-gray-700 italic">&ldquo;{v.original}&rdquo;</span>
+          <button
+            onClick={() => setShowFix((v) => !v)}
+            className="text-indigo-600 hover:text-indigo-500 underline text-xs"
+          >
+            {showFix ? 'Hide' : 'Show'} suggested fix
+          </button>
+          {showFix && (
+            <p className="mt-1 text-gray-700 bg-white rounded p-2 border border-gray-200">{r.suggested_fix}</p>
+          )}
         </div>
-        <div>
-          <span className="block text-gray-400 mb-0.5">Suggested</span>
-          <span className="text-gray-700">{v.suggestion}</span>
-        </div>
-      </div>
+      )}
     </div>
   )
 }
+
+// ─── Compliance detail panel ──────────────────────────────────────────────────
+
+type ComplianceCheckRow = {
+  overall_status: string
+  auto_fixes_applied: number
+  minor_count: number
+  major_count: number
+  critical_count: number
+  rule_results: RuleResult[]
+  duration_ms: number
+}
+
+function ComplianceDetailPanel({ checkId }: { checkId: string }) {
+  const [data, setData] = useState<ComplianceCheckRow | null>(null)
+  const [loading, setLoading] = useState(false)
+  const [loaded, setLoaded] = useState(false)
+  const [error, setError] = useState<string | null>(null)
+
+  async function load() {
+    if (loaded) return
+    setLoading(true)
+    const supabase = createClient()
+    const { data: row, error: err } = await supabase
+      .from('compliance_checks')
+      .select('overall_status, auto_fixes_applied, minor_count, major_count, critical_count, rule_results, duration_ms')
+      .eq('id', checkId)
+      .single()
+    setLoading(false)
+    setLoaded(true)
+    if (err || !row) { setError(err?.message ?? 'Not found'); return }
+    setData(row as ComplianceCheckRow)
+  }
+
+  const [open, setOpen] = useState(false)
+
+  function toggle() {
+    if (!open) load()
+    setOpen((v) => !v)
+  }
+
+  return (
+    <div className="border-t border-gray-100">
+      <button
+        onClick={toggle}
+        className="w-full flex items-center justify-between px-5 py-2.5 text-xs text-gray-500 hover:bg-gray-50 transition-colors"
+      >
+        <span className="font-medium">Compliance details</span>
+        <span>{open ? '▲' : '▼'}</span>
+      </button>
+
+      {open && (
+        <div className="px-5 pb-4 space-y-2">
+          {loading && <p className="text-xs text-gray-400 animate-pulse">Loading…</p>}
+          {error && <p className="text-xs text-red-500">{error}</p>}
+          {data && (
+            <>
+              <div className="flex items-center gap-3 text-xs text-gray-500 pb-1">
+                {data.auto_fixes_applied > 0 && (
+                  <span className="text-blue-600">{data.auto_fixes_applied} auto-fix{data.auto_fixes_applied > 1 ? 'es' : ''} applied</span>
+                )}
+                <span>{data.minor_count} minor · {data.major_count} major · {data.critical_count} critical</span>
+                <span className="text-gray-400">{data.duration_ms}ms</span>
+              </div>
+              <div className="space-y-2">
+                {(data.rule_results as RuleResult[]).map((r, i) => (
+                  <RuleResultRow key={r.rule_id ?? i} r={r} />
+                ))}
+              </div>
+            </>
+          )}
+        </div>
+      )}
+    </div>
+  )
+}
+
+// ─── Main card ────────────────────────────────────────────────────────────────
 
 type Props = {
   item: ContentQueueItem
@@ -82,11 +201,8 @@ type Props = {
 export function ContentApprovalCard({ item, onApprove, onReject, onEdit }: Props) {
   const [actionLoading, setActionLoading] = useState<'approve' | 'reject' | null>(null)
   const [error, setError] = useState<string | null>(null)
-  const [showViolations, setShowViolations] = useState(false)
 
   const content = item.content as Record<string, string>
-  const compliance = item.compliance_result
-  const violations = compliance?.violations ?? []
 
   const bodyPreview = content.body_plain
     ? content.body_plain.slice(0, 300)
@@ -137,6 +253,7 @@ export function ContentApprovalCard({ item, onApprove, onReject, onEdit }: Props
               {item.audience.replace(/_/g, ' ')}
             </span>
           )}
+          <ComplianceStatusBadge status={item.compliance_status} />
         </div>
         <span className="text-xs text-gray-400 whitespace-nowrap flex-shrink-0">
           {formatRelativeTime(item.created_at)}
@@ -148,6 +265,9 @@ export function ContentApprovalCard({ item, onApprove, onReject, onEdit }: Props
         {content.subject && (
           <p className="text-sm font-medium text-gray-900 mb-1">{content.subject}</p>
         )}
+        {content.title && !content.subject && (
+          <p className="text-sm font-medium text-gray-900 mb-1">{content.title}</p>
+        )}
         {bodyPreview ? (
           <p className="text-sm text-gray-600 leading-relaxed line-clamp-4">
             {bodyPreview}
@@ -158,36 +278,9 @@ export function ContentApprovalCard({ item, onApprove, onReject, onEdit }: Props
         )}
       </div>
 
-      {/* Compliance result */}
-      <div className="px-5 py-3 border-t border-gray-100 flex items-center gap-3 flex-wrap">
-        {compliance ? (
-          <>
-            <ComplianceBadge result={compliance.result} />
-            {violations.length > 0 && (
-              <button
-                onClick={() => setShowViolations((v) => !v)}
-                className="text-xs text-gray-500 hover:text-gray-700 underline"
-              >
-                {violations.length} violation{violations.length > 1 ? 's' : ''} &mdash;{' '}
-                {showViolations ? 'hide' : 'show'}
-              </button>
-            )}
-            {compliance.escalation_reason && (
-              <span className="text-xs text-amber-600">{compliance.escalation_reason}</span>
-            )}
-          </>
-        ) : (
-          <span className="text-xs text-gray-400">No compliance result attached</span>
-        )}
-      </div>
-
-      {/* Violations accordion */}
-      {showViolations && violations.length > 0 && (
-        <div className="px-5 pb-4 space-y-2">
-          {violations.map((v, i) => (
-            <ViolationRow key={i} v={v} />
-          ))}
-        </div>
+      {/* Compliance detail panel — expandable, loads on demand */}
+      {item.latest_compliance_check_id && (
+        <ComplianceDetailPanel checkId={item.latest_compliance_check_id} />
       )}
 
       {/* Inline error */}

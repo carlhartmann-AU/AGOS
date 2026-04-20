@@ -12,6 +12,10 @@
     {
       "path": "/api/cron/triple-whale-daily",
       "schedule": "0 22 * * *"
+    },
+    {
+      "path": "/api/cron/intelligence-weekly",
+      "schedule": "0 22 * * 0"
     }
   ]
 }

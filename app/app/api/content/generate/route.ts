@@ -255,5 +255,12 @@ Produce structured JSON output following the schema in your system prompt.`
     return NextResponse.json({ error: insertError.message }, { status: 500 })
   }
 
+  // Fire-and-forget compliance check — result writes back asynchronously
+  fetch(`${request.nextUrl.origin}/api/agents/compliance/check`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ content_id: row.id }),
+  }).catch((err) => console.error('[content/generate] compliance trigger failed:', err))
+
   return NextResponse.json({ ok: true, id: row.id, content_type })
 }

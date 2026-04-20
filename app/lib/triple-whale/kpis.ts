@@ -33,8 +33,10 @@ export function resolveWindow(window: WindowKey, now = new Date()): { start: str
   const end = toYMD(now)
 
   switch (window) {
-    case '24h':
-      return { start: end, end, expectedDays: 1 }
+    case '24h': {
+      const yesterday = toYMD(daysAgo(now, 1))
+      return { start: yesterday, end: yesterday, expectedDays: 1 }
+    }
     case '7d': {
       const start = toYMD(daysAgo(now, 6))
       return { start, end, expectedDays: 7 }
@@ -76,20 +78,29 @@ export async function getKPIs(
 ): Promise<KPIResult> {
   const { start, end, expectedDays } = resolveWindow(window)
 
-  const { data: rows, error } = await supabase
-    .from('tw_daily_summary')
-    .select('date, revenue, orders, aov, new_customers, returning_customers, source_currency, fx_rates')
-    .eq('brand_id', brandId)
-    .gte('date', start)
-    .lte('date', end)
-    .order('date', { ascending: true })
+  type SummaryRow = {
+    date: string
+    revenue: number | null
+    orders: number | null
+    aov: number | null
+    new_customers: number | null
+    returning_customers: number | null
+    source_currency: string | null
+    fx_rates: Record<string, number> | null
+  }
+
+  const { data: rows, error } = await supabase.rpc('get_daily_summary', {
+    p_brand_id: brandId,
+    p_start: start,
+    p_end: end,
+  }) as { data: SummaryRow[] | null; error: { message: string } | null }
 
   if (error) throw new Error(`Failed to read cache: ${error.message}`)
 
   // Convert each day's revenue to display currency using that day's FX rate
   const daily = (rows ?? []).map(r => {
     const sourceCurrency = r.source_currency ?? 'GBP'
-    const rates = (r.fx_rates ?? {}) as Record<string, number>
+    const rates = (typeof r.fx_rates === 'string' ? JSON.parse(r.fx_rates) : r.fx_rates ?? {}) as Record<string, number>
     const convertedRevenue = convertAmount(Number(r.revenue ?? 0), sourceCurrency, displayCurrency, rates)
     return {
       date: r.date,
@@ -108,9 +119,12 @@ export async function getKPIs(
 
   // Latest sync timestamp
   const { data: syncRow } = await supabase
-    .from('tw_latest_sync')
+    .from('tw_sync_log')
     .select('completed_at, started_at, status')
     .eq('brand_id', brandId)
+    .eq('status', 'success')
+    .order('completed_at', { ascending: false })
+    .limit(1)
     .maybeSingle()
 
   return {

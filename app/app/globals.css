@@ -1,3 +1,41 @@
+@import url('https://fonts.googleapis.com/css2?family=Geist:wght@300;400;500;600;700&family=Geist+Mono:wght@400;500;600&display=swap');
+
 @tailwind base;
 @tailwind components;
 @tailwind utilities;
+
+:root {
+  --bg: #f6f7f9;
+  --surface: #ffffff;
+  --border: #e5e7eb;
+  --border-subtle: #f3f4f6;
+  --text: #111827;
+  --text-secondary: #6b7280;
+  --text-muted: #9ca3af;
+
+  --nav-bg: #0d0f18;
+  --nav-border: #1c2035;
+  --nav-text: #8892a4;
+  --nav-text-active: #f0f2f7;
+  --nav-item-active: rgba(255, 255, 255, 0.08);
+  --nav-item-hover: rgba(255, 255, 255, 0.04);
+
+  --accent: #4f46e5;
+  --accent-hover: #4338ca;
+
+  --radius: 8px;
+  --radius-sm: 6px;
+  --radius-lg: 12px;
+}
+
+body {
+  background-color: var(--bg);
+  color: var(--text);
+  font-family: 'Geist', system-ui, -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
+}
+
+code,
+pre,
+.font-mono {
+  font-family: 'Geist Mono', 'Menlo', 'Monaco', 'Cascadia Code', monospace;
+}

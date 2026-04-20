@@ -35,6 +35,8 @@ export type ComplianceResult = {
   escalation_reason?: string
 }
 
+export type ComplianceStatus = 'passed' | 'warnings' | 'escalated' | 'blocked' | 'pending' | 'skipped'
+
 export type ContentQueueItem = {
   id: string
   brand_id: string
@@ -42,6 +44,8 @@ export type ContentQueueItem = {
   status: ContentQueueStatus
   content: Record<string, unknown>
   compliance_result: ComplianceResult | null
+  compliance_status: ComplianceStatus | null
+  latest_compliance_check_id: string | null
   platform: string | null
   audience: string | null
   approved_by: string | null

@@ -10,16 +10,16 @@ import type { ContentQueueItem } from '@/types'
 
 function SkeletonCard() {
   return (
-    <div className="bg-white rounded-lg border border-gray-200 p-5 animate-pulse space-y-3">
+    <div className="rounded-lg p-5 animate-pulse space-y-3" style={{ background: 'var(--surface)', border: '1px solid var(--border)' }}>
       <div className="flex gap-2">
-        <div className="h-5 bg-gray-100 rounded w-16" />
-        <div className="h-5 bg-gray-100 rounded w-20" />
+        <div className="h-5 rounded w-16" style={{ background: 'var(--border)' }} />
+        <div className="h-5 rounded w-20" style={{ background: 'var(--border)' }} />
       </div>
-      <div className="h-4 bg-gray-100 rounded w-2/3" />
+      <div className="h-4 rounded w-2/3" style={{ background: 'var(--border)' }} />
       <div className="space-y-1.5">
-        <div className="h-3 bg-gray-100 rounded w-full" />
-        <div className="h-3 bg-gray-100 rounded w-5/6" />
-        <div className="h-3 bg-gray-100 rounded w-4/6" />
+        <div className="h-3 rounded w-full" style={{ background: 'var(--border)' }} />
+        <div className="h-3 rounded w-5/6" style={{ background: 'var(--border)' }} />
+        <div className="h-3 rounded w-4/6" style={{ background: 'var(--border)' }} />
       </div>
     </div>
   )
@@ -202,7 +202,7 @@ export default function ContentApprovalsPage() {
           title="Content Approvals"
           description="Review and approve content before it publishes."
         />
-        <div className="mt-6 bg-white rounded-lg border border-gray-200 px-5 py-10 text-center text-sm text-gray-400">
+        <div className="mt-6 rounded-lg px-5 py-10 text-center text-sm" style={{ background: 'var(--surface)', border: '1px solid var(--border)', color: 'var(--text-muted)' }}>
           Select a brand to view the approval queue.
         </div>
       </div>
@@ -240,7 +240,7 @@ export default function ContentApprovalsPage() {
             <h2 className="text-xs font-semibold text-gray-500 uppercase tracking-wide">
               Pending approval
             </h2>
-            <span className="text-xs bg-gray-100 text-gray-500 px-2 py-0.5 rounded-full">
+            <span className="text-xs px-2 py-0.5 rounded-full" style={{ background: 'var(--bg)', color: 'var(--text-muted)' }}>
               {loading ? '…' : pendingItems.length}
             </span>
           </div>
@@ -257,7 +257,7 @@ export default function ContentApprovalsPage() {
               <SkeletonCard />
             </div>
           ) : pendingItems.length === 0 ? (
-            <div className="bg-white rounded-lg border border-gray-200 px-5 py-10 text-center text-sm text-gray-400">
+            <div className="rounded-lg px-5 py-10 text-center text-sm" style={{ background: 'var(--surface)', border: '1px solid var(--border)', color: 'var(--text-muted)' }}>
               No content awaiting approval for {activeBrand.name}.
             </div>
           ) : (

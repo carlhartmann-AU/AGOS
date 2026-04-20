@@ -36,7 +36,7 @@ export default async function DashboardLayout({
 
   return (
     <BrandProvider brands={accessibleBrands}>
-      <div className="flex h-screen bg-gray-50">
+      <div className="flex h-screen" style={{ background: 'var(--bg)' }}>
         <Sidebar user={user} role={role} />
         <main className="flex-1 overflow-y-auto px-8 py-6">
           {children}

@@ -26,6 +26,7 @@ type QueueRow = {
   status: string
   created_at: string
   title: string | null
+  compliance_status: string | null
 }
 
 // ─── Date helpers ─────────────────────────────────────────────────────────────
@@ -82,7 +83,7 @@ export async function GET(request: NextRequest) {
 
     admin
       .from('content_queue')
-      .select('id, content_type, status, created_at, content')
+      .select('id, content_type, status, created_at, content, compliance_status')
       .eq('brand_id', brandId)
       .order('created_at', { ascending: false })
       .limit(5),
@@ -105,6 +106,7 @@ export async function GET(request: NextRequest) {
       status: r.status,
       created_at: r.created_at,
       title: (c?.title ?? c?.subject ?? c?.caption ?? null) as string | null,
+      compliance_status: (r.compliance_status as string | null) ?? null,
     } as QueueRow
   })
 

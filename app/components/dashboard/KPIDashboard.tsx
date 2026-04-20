@@ -1,7 +1,7 @@
 // components/dashboard/KPIDashboard.tsx
 'use client'
 
-import { useCallback, useEffect, useState, useTransition } from 'react'
+import { useCallback, useEffect, useRef, useState, useTransition } from 'react'
 import type { KPIResult, WindowKey } from '@/lib/triple-whale/kpis'
 
 interface Props {
@@ -52,42 +52,55 @@ export default function KPIDashboard({ brandId, initialCurrency }: Props) {
     if (saved && CURRENCY_OPTIONS.includes(saved as Currency)) return saved as Currency
     return initialCurrency as Currency | undefined
   })
+  // currencyRef is always in sync with currency state; used by effects/callbacks to
+  // avoid stale closures without adding currency to every dependency array.
+  const currencyRef = useRef(currency)
+
   const [kpis, setKpis] = useState<KPIResult | null>(null)
   const [loading, setLoading] = useState(true)
   const [refreshing, setRefreshing] = useState(false)
   const [error, setError] = useState<string | null>(null)
   const [, startTransition] = useTransition()
 
-  const fetchKPIs = useCallback(async (w: WindowKey, c?: Currency) => {
-    const params = new URLSearchParams({ brand_id: brandId, window: w })
-    if (c) params.set('currency', c)
-    const res = await fetch(`/api/kpis?${params.toString()}`, { cache: 'no-store' })
-    if (!res.ok) throw new Error(`KPI fetch failed: ${res.status}`)
-    return (await res.json()) as KPIResult
-  }, [brandId])
-
-  // Initial load + on selectedWindow/currency change
-  useEffect(() => {
+  // Single fetch-and-set function used by all triggers (effect, currency click, refresh).
+  const loadKPIs = useCallback(async (w: WindowKey, c: Currency | undefined) => {
     setLoading(true)
     setError(null)
-    fetchKPIs(selectedWindow, currency)
-      .then(data => {
-        setKpis(data)
-        // If user hadn't picked a currency yet, lock in the brand default returned by the API
-        if (!currency && data.display_currency) {
-          setCurrency(data.display_currency as Currency)
-        }
-        setLoading(false)
-      })
-      .catch(err => {
-        setError(err.message)
-        setLoading(false)
-      })
-  }, [selectedWindow, currency, fetchKPIs])
+    try {
+      const params = new URLSearchParams({ brand_id: brandId, window: w })
+      if (c) params.set('currency', c)
+      const res = await fetch(`/api/kpis?${params.toString()}`, { cache: 'no-store' })
+      if (!res.ok) throw new Error(`KPI fetch failed: ${res.status}`)
+      const data = (await res.json()) as KPIResult
+      setKpis(data)
+      // First load only: if no currency was pre-selected, adopt the brand default from
+      // the API response. Update ref + state without triggering a second fetch
+      // (currency is intentionally absent from the useEffect dependency array below).
+      if (!c && data.display_currency && CURRENCY_OPTIONS.includes(data.display_currency as Currency)) {
+        const brandDefault = data.display_currency as Currency
+        currencyRef.current = brandDefault
+        setCurrency(brandDefault)
+      }
+    } catch (err) {
+      setError(err instanceof Error ? err.message : 'Load failed')
+    } finally {
+      setLoading(false)
+    }
+  }, [brandId])
+
+  // Re-fetch when the time window changes. Currency changes are handled explicitly
+  // in handleCurrencyChange — keeping currency out of deps prevents a double-fetch
+  // on first load when setCurrency is called after the brand default is returned.
+  useEffect(() => {
+    loadKPIs(selectedWindow, currencyRef.current)
+  }, [selectedWindow, loadKPIs])
 
   const handleCurrencyChange = (c: Currency) => {
+    currencyRef.current = c
     setCurrency(c)
     setSavedCurrency(c)
+    // Explicit re-fetch with the new currency — server does the conversion.
+    loadKPIs(selectedWindow, c)
   }
 
   const handleRefresh = async () => {
@@ -99,13 +112,15 @@ export default function KPIDashboard({ brandId, initialCurrency }: Props) {
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ brand_id: brandId, days: 1, triggered_by: 'manual' }),
       })
-
-      if (!syncRes.ok && syncRes.status !== 200) {
-        const errBody = await syncRes.json()
+      if (!syncRes.ok) {
+        const errBody = await syncRes.json().catch(() => ({})) as { error?: string }
         throw new Error(errBody.error ?? 'Sync failed')
       }
-
-      const fresh = await fetchKPIs(selectedWindow, currency)
+      const params = new URLSearchParams({ brand_id: brandId, window: selectedWindow })
+      if (currencyRef.current) params.set('currency', currencyRef.current)
+      const res = await fetch(`/api/kpis?${params.toString()}`, { cache: 'no-store' })
+      if (!res.ok) throw new Error(`KPI fetch failed: ${res.status}`)
+      const fresh = (await res.json()) as KPIResult
       startTransition(() => setKpis(fresh))
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Refresh failed')
@@ -124,32 +139,30 @@ export default function KPIDashboard({ brandId, initialCurrency }: Props) {
       {/* Controls: selectedWindow toggle + currency toggle + freshness + refresh */}
       <div className="flex items-center justify-between flex-wrap gap-3">
         <div className="flex items-center gap-2 flex-wrap">
-          <div className="inline-flex rounded-lg border border-gray-200 bg-white p-1">
+          <div className="inline-flex rounded-lg p-1" style={{ border: '1px solid var(--border)', background: 'var(--surface)' }}>
             {WINDOW_OPTIONS.map(opt => (
               <button
                 key={opt.key}
                 onClick={() => setSelectedWindow(opt.key)}
-                className={`px-3 py-1.5 text-sm font-medium rounded-md transition ${
-                  selectedWindow === opt.key
-                    ? 'bg-gray-900 text-white'
-                    : 'text-gray-600 hover:text-gray-900'
-                }`}
+                className="px-3 py-1.5 text-sm font-medium rounded-md transition"
+                style={selectedWindow === opt.key
+                  ? { background: 'var(--text)', color: '#fff' }
+                  : { color: 'var(--text-secondary)' }}
               >
                 {opt.label}
               </button>
             ))}
           </div>
 
-          <div className="inline-flex rounded-lg border border-gray-200 bg-white p-1">
+          <div className="inline-flex rounded-lg p-1" style={{ border: '1px solid var(--border)', background: 'var(--surface)' }}>
             {CURRENCY_OPTIONS.map(c => (
               <button
                 key={c}
                 onClick={() => handleCurrencyChange(c)}
-                className={`px-2.5 py-1.5 text-sm font-medium rounded-md transition ${
-                  displayCurrency === c
-                    ? 'bg-gray-900 text-white'
-                    : 'text-gray-600 hover:text-gray-900'
-                }`}
+                className="px-2.5 py-1.5 text-sm font-medium rounded-md transition"
+                style={currency === c
+                  ? { background: 'var(--text)', color: '#fff' }
+                  : { color: 'var(--text-secondary)' }}
                 title={`Display in ${c}`}
               >
                 {c}
@@ -168,7 +181,8 @@ export default function KPIDashboard({ brandId, initialCurrency }: Props) {
           <button
             onClick={handleRefresh}
             disabled={refreshing}
-            className="inline-flex items-center gap-1.5 px-3 py-1.5 text-sm font-medium text-gray-700 bg-white border border-gray-200 rounded-lg hover:bg-gray-50 disabled:opacity-50"
+            className="inline-flex items-center gap-1.5 px-3 py-1.5 text-sm font-medium rounded-lg disabled:opacity-50 transition-colors hover:brightness-95"
+            style={{ color: 'var(--text-secondary)', background: 'var(--surface)', border: '1px solid var(--border)' }}
           >
             <RefreshIcon spinning={refreshing} />
             Refresh
@@ -177,19 +191,19 @@ export default function KPIDashboard({ brandId, initialCurrency }: Props) {
       </div>
 
       {isStale && !refreshing && (
-        <div className="rounded-lg bg-amber-50 border border-amber-200 px-3 py-2 text-sm text-amber-800">
+        <div className="rounded-lg px-3 py-2 text-sm text-amber-800 bg-amber-50 border border-amber-200">
           Data is over 48 hours old. Daily sync may have failed — try refreshing manually.
         </div>
       )}
 
       {hasPartialCache && !isStale && (
-        <div className="rounded-lg bg-blue-50 border border-blue-200 px-3 py-2 text-sm text-blue-800">
+        <div className="rounded-lg px-3 py-2 text-sm text-blue-700 bg-blue-50 border border-blue-200">
           Showing {kpis!.days_cached} of {kpis!.days_expected} days. Older data is being backfilled.
         </div>
       )}
 
       {error && (
-        <div className="rounded-lg bg-red-50 border border-red-200 px-3 py-2 text-sm text-red-800">
+        <div className="rounded-lg px-3 py-2 text-sm text-red-700 bg-red-50 border border-red-200">
           {error}
         </div>
       )}
@@ -233,9 +247,9 @@ function FreshnessPill({ label, refreshing, stale, error }: {
 
 function KPITile({ label, value }: { label: string; value: string }) {
   return (
-    <div className="rounded-lg border border-gray-200 bg-white p-4">
-      <div className="text-xs font-medium text-gray-500 uppercase tracking-wide">{label}</div>
-      <div className="mt-1 text-2xl font-semibold text-gray-900">{value}</div>
+    <div className="rounded-lg p-5" style={{ background: 'var(--surface)', border: '1px solid var(--border)' }}>
+      <div className="text-xs font-semibold uppercase tracking-wider" style={{ color: 'var(--text-muted)' }}>{label}</div>
+      <div className="mt-1.5 text-2xl font-semibold" style={{ color: 'var(--text)' }}>{value}</div>
     </div>
   )
 }
@@ -244,9 +258,9 @@ function KPIGridSkeleton() {
   return (
     <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
       {[0, 1, 2, 3].map(i => (
-        <div key={i} className="rounded-lg border border-gray-200 bg-white p-4">
-          <div className="h-3 w-16 bg-gray-200 rounded animate-pulse" />
-          <div className="mt-2 h-7 w-24 bg-gray-200 rounded animate-pulse" />
+        <div key={i} className="rounded-lg p-5" style={{ background: 'var(--surface)', border: '1px solid var(--border)' }}>
+          <div className="h-3 w-16 rounded animate-pulse" style={{ background: 'var(--border)' }} />
+          <div className="mt-2.5 h-7 w-24 rounded animate-pulse" style={{ background: 'var(--border)' }} />
         </div>
       ))}
     </div>
