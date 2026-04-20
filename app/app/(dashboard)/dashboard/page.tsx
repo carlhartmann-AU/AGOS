@@ -78,9 +78,14 @@ const PRIORITY_BADGE: Record<string, string> = {
   low:    'bg-gray-100 text-gray-600',
 }
 
-function ComplianceStatusBadge({ status }: { status: string | null | undefined }) {
-  const label = status ? (COMPLIANCE_LABEL[status] ?? 'Checking…') : 'Checking…'
-  const style = status ? (COMPLIANCE_BADGE[status] ?? 'bg-gray-100 text-gray-500') : 'bg-gray-100 text-gray-400'
+function ComplianceStatusBadge({ status, createdAt }: { status: string | null | undefined; createdAt?: string }) {
+  const isRecent = !!createdAt && (Date.now() - new Date(createdAt).getTime()) < 60_000
+  const label = status
+    ? (COMPLIANCE_LABEL[status] ?? status)
+    : isRecent ? 'Checking…' : '—'
+  const style = status
+    ? (COMPLIANCE_BADGE[status] ?? 'bg-gray-100 text-gray-500')
+    : isRecent ? 'bg-blue-50 text-blue-500' : 'bg-transparent text-gray-300'
   return (
     <span className={`flex-shrink-0 text-xs font-medium px-2 py-0.5 rounded ${style}`}>
       {label}
@@ -429,7 +434,7 @@ export default function DashboardPage() {
                     </p>
                   </div>
                   <div className="flex items-center gap-1.5 flex-shrink-0">
-                    <ComplianceStatusBadge status={item.compliance_status} />
+                    <ComplianceStatusBadge status={item.compliance_status} createdAt={item.created_at} />
                     <span className={`text-xs font-medium px-2 py-0.5 rounded ${STATUS_STYLES[item.status] ?? 'bg-gray-100 text-gray-600'}`}>
                       {item.status.replace('_', ' ')}
                     </span>

@@ -45,11 +45,19 @@ const COMPLIANCE_STATUS_LABELS: Record<string, string> = {
   blocked:  '✗ Blocked',
 }
 
-function ComplianceStatusBadge({ status }: { status: string | null | undefined }) {
+function ComplianceStatusBadge({ status, createdAt }: { status: string | null | undefined; createdAt?: string }) {
   if (!status || status === 'pending') {
+    const isRecent = !!createdAt && (Date.now() - new Date(createdAt).getTime()) < 60_000
+    if (isRecent) {
+      return (
+        <span className="inline-flex items-center px-2 py-0.5 rounded border text-xs font-medium bg-blue-50 text-blue-500 border-blue-200 animate-pulse">
+          Checking…
+        </span>
+      )
+    }
     return (
-      <span className="inline-flex items-center px-2 py-0.5 rounded border text-xs font-medium bg-gray-50 text-gray-500 border-gray-200 animate-pulse">
-        Checking…
+      <span className="inline-flex items-center px-2 py-0.5 rounded border text-xs font-medium bg-gray-50 text-gray-400 border-gray-100">
+        Not checked
       </span>
     )
   }
@@ -253,7 +261,7 @@ export function ContentApprovalCard({ item, onApprove, onReject, onEdit }: Props
               {item.audience.replace(/_/g, ' ')}
             </span>
           )}
-          <ComplianceStatusBadge status={item.compliance_status} />
+          <ComplianceStatusBadge status={item.compliance_status} createdAt={item.created_at} />
         </div>
         <span className="text-xs text-gray-400 whitespace-nowrap flex-shrink-0">
           {formatRelativeTime(item.created_at)}
