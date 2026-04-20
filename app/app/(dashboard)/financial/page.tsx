@@ -10,6 +10,7 @@ import {
   getPriorFiscalYear,
 } from '@/lib/utils/fiscal-year'
 import type { FYConfig } from '@/types'
+import type { CFOReport } from '@/lib/agents/cfo/types'
 
 // ─── Types ────────────────────────────────────────────────────────────────────
 
@@ -422,16 +423,52 @@ function KPITile({
   )
 }
 
+// ─── CFO helpers ──────────────────────────────────────────────────────────────
+
+function fmtRatio(v: number | null | undefined): string {
+  if (v == null) return '—'
+  return v.toFixed(1) + 'x'
+}
+
+function fmtMo(v: number | null | undefined): string {
+  if (v == null) return '—'
+  return v.toFixed(1) + ' mo'
+}
+
+function fmtVariancePct(v: number | null | undefined): string {
+  if (v == null) return '—'
+  return (v >= 0 ? '+' : '') + v.toFixed(1) + '%'
+}
+
+function statusColor(s: string): string {
+  if (s === 'ahead') return 'var(--ok)'
+  if (s === 'behind') return 'var(--bad)'
+  return 'var(--ink-3)'
+}
+
+function statusBg(s: string): string {
+  if (s === 'ahead') return 'var(--ok-bg)'
+  if (s === 'behind') return 'var(--bad-bg)'
+  return 'var(--panel-2)'
+}
+
+function healthColor(h: string): string {
+  if (h === 'healthy') return 'var(--ok)'
+  if (h === 'critical') return 'var(--bad)'
+  return '#e8a23a'
+}
+
 // ─── Overview Tab ─────────────────────────────────────────────────────────────
 
 function OverviewTab({
-  annual, priorAnnual, monthlyPL, selectedFY, priorFY,
+  annual, priorAnnual, monthlyPL, selectedFY, priorFY, cfoReport,
 }: {
   annual: Record<string, number> | null
   priorAnnual: Record<string, number> | null
   monthlyPL: { label: string; data: Record<string, number> }[]
   selectedFY: string
   priorFY: string
+  cfoReport: CFOReport | null
 }) {
   if (!annual) {
     return <div style={{ color: 'var(--ink-4)', padding: '32px 0', textAlign: 'center' }}>No annual summary available for {selectedFY}.</div>
@@ -536,6 +573,194 @@ function OverviewTab({
           </div>
         ))}
       </div>
+
+      {/* ── CFO Analysis (when report available) ── */}
+      {cfoReport && (
+        <>
+          {/* Unit Economics */}
+          <div style={{ background: 'var(--panel)', border: '1px solid var(--line)', borderRadius: 'var(--radius)', padding: '18px 20px' }}>
+            <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 16 }}>
+              <div style={{ fontSize: 11, color: 'var(--ink-4)', fontWeight: 500, letterSpacing: '0.06em', textTransform: 'uppercase' }}>
+                Unit Economics
+              </div>
+              <span style={{
+                fontSize: 11, fontWeight: 600, padding: '2px 8px', borderRadius: 4,
+                color: healthColor(cfoReport.unit_economics.health),
+                background: cfoReport.unit_economics.health === 'healthy' ? 'var(--ok-bg)' : cfoReport.unit_economics.health === 'critical' ? 'var(--bad-bg)' : '#fef3e2',
+              }}>
+                {cfoReport.unit_economics.health.toUpperCase()}
+              </span>
+            </div>
+            <div style={{ display: 'grid', gridTemplateColumns: 'repeat(6,1fr)', gap: 12 }}>
+              {[
+                { label: 'CAC', val: fmtAUD(cfoReport.unit_economics.cac, true) },
+                { label: 'LTV', val: fmtAUD(cfoReport.unit_economics.ltv, true) },
+                { label: 'LTV:CAC', val: fmtRatio(cfoReport.unit_economics.ltv_cac_ratio) },
+                { label: 'ROAS', val: fmtRatio(cfoReport.unit_economics.roas) },
+                { label: 'Payback', val: fmtMo(cfoReport.unit_economics.payback_months) },
+                { label: 'Gross Margin', val: cfoReport.unit_economics.gross_margin_pct != null ? fmtPct(cfoReport.unit_economics.gross_margin_pct) : '—' },
+              ].map((k) => (
+                <div key={k.label}>
+                  <div style={{ fontSize: 10, color: 'var(--ink-4)', letterSpacing: '0.06em', textTransform: 'uppercase', marginBottom: 4 }}>{k.label}</div>
+                  <div style={{ fontSize: 18, fontWeight: 500, fontFamily: 'Geist Mono, monospace', color: 'var(--ink)' }}>{k.val}</div>
+                </div>
+              ))}
+            </div>
+            {cfoReport.unit_economics.notes.length > 0 && (
+              <div style={{ marginTop: 12, fontSize: 11, color: 'var(--ink-4)', fontStyle: 'italic' }}>
+                {cfoReport.unit_economics.notes.join(' · ')}
+              </div>
+            )}
+          </div>
+
+          {/* Budget vs Actual */}
+          <div style={{ background: 'var(--panel)', border: '1px solid var(--line)', borderRadius: 'var(--radius)', padding: '18px 20px' }}>
+            <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 16 }}>
+              <div style={{ fontSize: 11, color: 'var(--ink-4)', fontWeight: 500, letterSpacing: '0.06em', textTransform: 'uppercase' }}>
+                Budget vs Actual — {cfoReport.budget_vs_actual.fiscal_year}
+              </div>
+              {cfoReport.budget_vs_actual.ytd_revenue_pct != null && (
+                <span style={{ fontSize: 12, color: 'var(--ink-3)', fontFamily: 'Geist Mono, monospace' }}>
+                  {cfoReport.budget_vs_actual.ytd_revenue_pct.toFixed(0)}% of revenue target
+                </span>
+              )}
+            </div>
+            <div style={{ overflowX: 'auto' }}>
+              <table style={{ borderCollapse: 'collapse', width: '100%', fontSize: 13 }}>
+                <thead>
+                  <tr style={{ borderBottom: '1px solid var(--line)' }}>
+                    {['Metric', 'Target', 'Actual', 'Variance', 'Status'].map(h => (
+                      <th key={h} style={{ padding: '6px 12px', textAlign: h === 'Metric' ? 'left' : 'right', fontSize: 10, fontFamily: 'Geist Mono, monospace', letterSpacing: '0.06em', color: 'var(--ink-4)', textTransform: 'uppercase', fontWeight: 500 }}>
+                        {h}
+                      </th>
+                    ))}
+                  </tr>
+                </thead>
+                <tbody>
+                  {cfoReport.budget_vs_actual.lines.map((line) => (
+                    <tr key={line.metric} style={{ borderBottom: '1px solid var(--line-2)' }}>
+                      <td style={{ padding: '7px 12px', color: 'var(--ink-2)', fontWeight: 500 }}>{line.label}</td>
+                      <td style={{ padding: '7px 12px', textAlign: 'right', fontFamily: 'Geist Mono, monospace', color: 'var(--ink-3)' }}>
+                        {line.target > 0 ? (line.metric.endsWith('_pct') ? fmtPct(line.target / 100) : fmtAUD(line.target, true)) : '—'}
+                      </td>
+                      <td style={{ padding: '7px 12px', textAlign: 'right', fontFamily: 'Geist Mono, monospace', color: 'var(--ink)' }}>
+                        {line.actual != null ? (line.metric.endsWith('_pct') ? fmtPct(line.actual / 100) : fmtAUD(line.actual, true)) : '—'}
+                      </td>
+                      <td style={{ padding: '7px 12px', textAlign: 'right', fontFamily: 'Geist Mono, monospace', color: line.variance_pct != null && line.variance_pct < 0 ? 'var(--bad)' : 'var(--ok)' }}>
+                        {fmtVariancePct(line.variance_pct)}
+                      </td>
+                      <td style={{ padding: '7px 12px', textAlign: 'right' }}>
+                        {line.status !== 'no_data' && (
+                          <span style={{ fontSize: 11, fontWeight: 600, padding: '2px 6px', borderRadius: 4, color: statusColor(line.status), background: statusBg(line.status) }}>
+                            {line.status.replace('_', ' ').toUpperCase()}
+                          </span>
+                        )}
+                      </td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+          </div>
+
+          {/* Cash Forecast + CFO Report row */}
+          <div style={{ display: 'grid', gridTemplateColumns: '1fr 2fr', gap: 12 }}>
+            {/* Cash Forecast */}
+            <div style={{ background: 'var(--panel)', border: '1px solid var(--line)', borderRadius: 'var(--radius)', padding: '18px 20px' }}>
+              <div style={{ fontSize: 11, color: 'var(--ink-4)', fontWeight: 500, letterSpacing: '0.06em', textTransform: 'uppercase', marginBottom: 16 }}>
+                Cash Forecast
+              </div>
+              <div style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
+                <div>
+                  <div style={{ fontSize: 10, color: 'var(--ink-4)', textTransform: 'uppercase', letterSpacing: '0.06em', marginBottom: 3 }}>Est. Cash Position</div>
+                  <div style={{ fontSize: 22, fontWeight: 500, fontFamily: 'Geist Mono, monospace' }}>
+                    {fmtAUD(cfoReport.cash_forecast.latest_closing_cash, true)}
+                  </div>
+                  {cfoReport.cash_forecast.month_label && (
+                    <div style={{ fontSize: 11, color: 'var(--ink-4)', marginTop: 2 }}>as of {cfoReport.cash_forecast.month_label}</div>
+                  )}
+                </div>
+                <div>
+                  <div style={{ fontSize: 10, color: 'var(--ink-4)', textTransform: 'uppercase', letterSpacing: '0.06em', marginBottom: 3 }}>Avg Monthly Net</div>
+                  <div style={{ fontSize: 16, fontWeight: 500, fontFamily: 'Geist Mono, monospace', color: (cfoReport.cash_forecast.avg_monthly_net ?? 0) < 0 ? 'var(--bad)' : 'inherit' }}>
+                    {fmtAUD(cfoReport.cash_forecast.avg_monthly_net, true)}
+                  </div>
+                </div>
+                {cfoReport.cash_forecast.runway_months != null && (
+                  <div>
+                    <div style={{ fontSize: 10, color: 'var(--ink-4)', textTransform: 'uppercase', letterSpacing: '0.06em', marginBottom: 3 }}>Runway</div>
+                    <div style={{ fontSize: 16, fontWeight: 500, fontFamily: 'Geist Mono, monospace', color: cfoReport.cash_forecast.runway_months < 6 ? 'var(--bad)' : 'inherit' }}>
+                      {cfoReport.cash_forecast.runway_months} mo
+                    </div>
+                  </div>
+                )}
+                <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
+                  <span style={{ fontSize: 10, color: 'var(--ink-4)', textTransform: 'uppercase', letterSpacing: '0.06em' }}>Trend</span>
+                  <span style={{ fontSize: 12, fontWeight: 600, color: cfoReport.cash_forecast.trend === 'improving' ? 'var(--ok)' : cfoReport.cash_forecast.trend === 'declining' ? 'var(--bad)' : 'var(--ink-3)' }}>
+                    {cfoReport.cash_forecast.trend.toUpperCase()}
+                  </span>
+                </div>
+              </div>
+            </div>
+
+            {/* CFO Report */}
+            <div style={{ background: 'var(--panel)', border: '1px solid var(--line)', borderRadius: 'var(--radius)', padding: '18px 20px' }}>
+              <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 14 }}>
+                <div style={{ fontSize: 11, color: 'var(--ink-4)', fontWeight: 500, letterSpacing: '0.06em', textTransform: 'uppercase' }}>
+                  CFO Analysis
+                </div>
+                {cfoReport.model_used && (
+                  <span style={{ fontSize: 10, color: 'var(--ink-4)', fontFamily: 'Geist Mono, monospace' }}>
+                    {cfoReport.model_used} · {cfoReport.cost_usd > 0 ? `$${cfoReport.cost_usd.toFixed(3)}` : 'data-only'}
+                  </span>
+                )}
+              </div>
+              {cfoReport.narrative ? (
+                <p style={{ fontSize: 13, color: 'var(--ink-2)', lineHeight: 1.6, marginBottom: 16 }}>
+                  {cfoReport.narrative}
+                </p>
+              ) : (
+                <p style={{ fontSize: 13, color: 'var(--ink-4)', fontStyle: 'italic', marginBottom: 16 }}>
+                  Run CFO analysis to generate narrative.
+                </p>
+              )}
+              {cfoReport.recommendations.length > 0 && (
+                <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
+                  {cfoReport.recommendations.slice(0, 3).map((r, i) => (
+                    <div key={i} style={{ display: 'flex', gap: 10, alignItems: 'flex-start', padding: '8px 10px', background: 'var(--panel-2)', borderRadius: 'var(--radius-sm)', border: '1px solid var(--line-2)' }}>
+                      <span style={{
+                        fontSize: 10, fontWeight: 700, padding: '2px 5px', borderRadius: 3, flexShrink: 0, marginTop: 1,
+                        color: r.priority === 'high' ? 'var(--bad)' : r.priority === 'medium' ? '#e8a23a' : 'var(--ink-3)',
+                        background: r.priority === 'high' ? 'var(--bad-bg)' : r.priority === 'medium' ? '#fef3e2' : 'var(--panel)',
+                      }}>
+                        {r.priority.toUpperCase()}
+                      </span>
+                      <div>
+                        <div style={{ fontSize: 12, fontWeight: 600, color: 'var(--ink)', marginBottom: 2 }}>{r.title}</div>
+                        <div style={{ fontSize: 11, color: 'var(--ink-3)' }}>{r.description}</div>
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              )}
+              {cfoReport.margin_alerts.length > 0 && (
+                <div style={{ marginTop: 12, display: 'flex', flexWrap: 'wrap', gap: 6 }}>
+                  {cfoReport.margin_alerts.map((a, i) => (
+                    <span key={i} style={{
+                      fontSize: 11, fontWeight: 500, padding: '3px 8px', borderRadius: 4,
+                      color: a.severity === 'high' ? 'var(--bad)' : a.severity === 'medium' ? '#c87d1a' : 'var(--ink-3)',
+                      background: a.severity === 'high' ? 'var(--bad-bg)' : a.severity === 'medium' ? '#fef3e2' : 'var(--panel-2)',
+                      border: '1px solid currentColor', opacity: 0.85,
+                    }}>
+                      ⚠ {a.title}
+                    </span>
+                  ))}
+                </div>
+              )}
+            </div>
+          </div>
+        </>
+      )}
     </div>
   )
 }
@@ -584,6 +809,7 @@ export default function FinancialPage() {
   const [error, setError] = useState<string | null>(null)
 
   const [activeTab, setActiveTab] = useState<TabId>('overview')
+  const [cfoReport, setCfoReport] = useState<CFOReport | null>(null)
 
   // ── Load fy_config on brand change ──────────────────────────────────────────
 
@@ -608,6 +834,16 @@ export default function FinancialPage() {
           setSelectedFY(getCurrentFiscalYear(cfg))
         })
     })
+  }, [activeBrand?.brand_id]) // eslint-disable-line react-hooks/exhaustive-deps
+
+  // ── Fetch latest CFO report ──────────────────────────────────────────────────
+
+  useEffect(() => {
+    if (!activeBrand) return
+    fetch(`/api/agents/cfo/report?brand_id=${activeBrand.brand_id}`)
+      .then((r) => r.json())
+      .then((data) => setCfoReport(data ?? null))
+      .catch(() => setCfoReport(null))
   }, [activeBrand?.brand_id]) // eslint-disable-line react-hooks/exhaustive-deps
 
   // ── Fetch all annual summaries ───────────────────────────────────────────────
@@ -817,6 +1053,7 @@ export default function FinancialPage() {
               monthlyPL={plCols}
               selectedFY={selectedFY}
               priorFY={priorFY}
+              cfoReport={cfoReport}
             />
           )}
 

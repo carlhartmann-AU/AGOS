@@ -16,6 +16,10 @@
     {
       "path": "/api/cron/intelligence-weekly",
       "schedule": "0 22 * * 0"
+    },
+    {
+      "path": "/api/cron/cfo-weekly",
+      "schedule": "0 23 * * 0"
     }
   ]
 }
