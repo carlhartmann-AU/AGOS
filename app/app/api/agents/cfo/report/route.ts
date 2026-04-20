@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server'
-import { createClient } from '@/lib/supabase/server'
+import { createAdminClient } from '@/lib/supabase/admin'
 import { runCFOAnalysis } from '@/lib/agents/cfo/engine'
 
 export const maxDuration = 60
@@ -25,7 +25,7 @@ export async function POST(req: NextRequest) {
   const window_start: string = body.window_start ?? fyStart.toISOString().slice(0, 10)
   const window_end: string = body.window_end ?? today.toISOString().slice(0, 10)
 
-  const supabase = await createClient()
+  const supabase = createAdminClient()
 
   try {
     const report = await runCFOAnalysis(supabase, brand_id, window_start, window_end, triggered_by)
@@ -49,7 +49,7 @@ export async function GET(req: NextRequest) {
     return NextResponse.json({ error: 'brand_id is required' }, { status: 400 })
   }
 
-  const supabase = await createClient()
+  const supabase = createAdminClient()
 
   const { data, error } = await supabase
     .from('cfo_reports')

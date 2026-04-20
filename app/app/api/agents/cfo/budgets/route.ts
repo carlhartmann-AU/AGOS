@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server'
-import { createClient } from '@/lib/supabase/server'
+import { createAdminClient } from '@/lib/supabase/admin'
 
 /**
  * GET /api/agents/cfo/budgets?brand_id=&fiscal_year=FY26
@@ -13,7 +13,7 @@ export async function GET(req: NextRequest) {
     return NextResponse.json({ error: 'brand_id is required' }, { status: 400 })
   }
 
-  const supabase = await createClient()
+  const supabase = createAdminClient()
 
   let query = supabase
     .from('financial_budgets')
@@ -42,7 +42,7 @@ export async function POST(req: NextRequest) {
     return NextResponse.json({ error: 'brand_id, fiscal_year, metric, target are required' }, { status: 400 })
   }
 
-  const supabase = await createClient()
+  const supabase = createAdminClient()
 
   const { data, error } = await supabase
     .from('financial_budgets')
@@ -69,7 +69,7 @@ export async function PATCH(req: NextRequest) {
     return NextResponse.json({ error: 'brand_id, fiscal_year, updates (object) are required' }, { status: 400 })
   }
 
-  const supabase = await createClient()
+  const supabase = createAdminClient()
   const now = new Date().toISOString()
 
   const rows = Object.entries(updates as Record<string, number>).map(([metric, target]) => ({
