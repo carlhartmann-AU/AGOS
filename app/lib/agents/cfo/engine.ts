@@ -167,14 +167,16 @@ function computeBudgetVsActual(
   const actual: Record<string, number | null> = {
     revenue:          plRows.reduce((s, r) => s + (r.data.total_revenue ?? 0), 0) || null,
     gross_profit:     plRows.reduce((s, r) => s + (r.data.gross_profit ?? 0), 0) || null,
-    gross_margin_pct: plRows.length > 0
-      ? plRows[plRows.length - 1].data.gross_margin_pct ?? null
+    // Model stores as decimal (0.645); budget targets store as percent (60.0) — normalize to percent
+    gross_margin_pct: plRows.length > 0 && plRows[plRows.length - 1].data.gross_margin_pct != null
+      ? (plRows[plRows.length - 1].data.gross_margin_pct) * 100
       : null,
     ebitda:           plRows.reduce((s, r) => s + (r.data.ebitda ?? 0), 0) || null,
     net_income:       plRows.reduce((s, r) => s + (r.data.net_income ?? 0), 0) || null,
     ad_spend:         plRows.reduce((s, r) => s + (r.data.performance_marketing ?? 0), 0) || null,
-    closing_cash:     cfRows.length > 0
-      ? cfRows[cfRows.length - 1].data.closing_cash ?? null
+    // closing_cash from cf_monthly model is 0 (model limitation) — omit as no_data
+    closing_cash:     cfRows.length > 0 && (cfRows[cfRows.length - 1].data.closing_cash ?? 0) !== 0
+      ? cfRows[cfRows.length - 1].data.closing_cash
       : null,
   }
 
