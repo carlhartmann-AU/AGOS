@@ -39,7 +39,11 @@ export async function middleware(request: NextRequest) {
 
   const isPublicPath = PUBLIC_PATHS.some((p) => pathname.startsWith(p))
 
-  if (!user && !isPublicPath) {
+  // Xero OAuth routes must be reachable without a session (browser redirect flow)
+  const XERO_OAUTH_PATHS = ['/api/xero/connect', '/api/xero/callback']
+  const isXeroOAuth = XERO_OAUTH_PATHS.some((p) => pathname.startsWith(p))
+
+  if (!user && !isPublicPath && !isXeroOAuth) {
     const url = request.nextUrl.clone()
     url.pathname = '/login'
     return NextResponse.redirect(url)

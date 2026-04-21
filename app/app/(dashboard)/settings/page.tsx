@@ -1,6 +1,7 @@
 'use client'
 
 import { useEffect, useRef, useState, useCallback } from 'react'
+import { useSearchParams } from 'next/navigation'
 import { createClient } from '@/lib/supabase/client'
 import { useBrand } from '@/context/BrandContext'
 import { PageHeader } from '@/components/PageHeader'
@@ -376,6 +377,7 @@ const DEFAULT_SCHEDULE: ContentSchedule = {
 export default function SettingsPage() {
   const { activeBrand } = useBrand()
   const supabase = createClient()
+  const searchParams = useSearchParams()
 
   const [activeTab, setActiveTab] = useState<TabId>('brand')
   const [loading, setLoading] = useState(true)
@@ -414,6 +416,14 @@ export default function SettingsPage() {
   const [integForm, setIntegForm] = useState<IntegForm>({ shopify_store_url: '', shopify_blog_id: '', shopify_access_token: '', dotdigital_endpoint: '', n8n_webhook_base: '', triple_whale_api_key: '', triple_whale_shop_domain: '' })
   const [twTestState, setTwTestState] = useState<'idle' | 'testing' | 'ok' | 'fail'>('idle')
   const [integSave, setIntegSave] = useState<SectionSave>({ state: 'idle', error: null })
+
+  // Xero OAuth connection
+  type XeroTenantStatus = { xero_tenant_id: string; xero_tenant_name: string; connected_at: string; last_sync: string | null }
+  const [xeroStatus, setXeroStatus] = useState<{ configured: boolean; connected: boolean; tenants: XeroTenantStatus[] } | null>(null)
+  const [xeroLoading, setXeroLoading] = useState(false)
+  const [xeroDisconnecting, setXeroDisconnecting] = useState(false)
+  const [xeroSuccessBanner, setXeroSuccessBanner] = useState(false)
+  const [xeroErrorBanner, setXeroErrorBanner] = useState<string | null>(null)
 
   // Team
   const [teamMembers, setTeamMembers] = useState<Profile[]>([])
@@ -503,6 +513,27 @@ export default function SettingsPage() {
     loadData()
     return () => { saveTimers.current.forEach(clearTimeout) }
   }, [loadData])
+
+  // Handle Xero OAuth return params + fetch Xero status
+  const fetchXeroStatus = useCallback(async (brandId: string) => {
+    setXeroLoading(true)
+    try {
+      const res = await fetch(`/api/xero/status?brand_id=${brandId}`)
+      if (res.ok) setXeroStatus(await res.json())
+    } catch { /* ignore */ } finally {
+      setXeroLoading(false)
+    }
+  }, [])
+
+  useEffect(() => {
+    if (!activeBrand) return
+    const xeroParam = searchParams.get('xero')
+    const tab = searchParams.get('tab')
+    if (tab === 'integrations') setActiveTab('integrations')
+    if (xeroParam === 'connected') setXeroSuccessBanner(true)
+    if (xeroParam === 'error') setXeroErrorBanner(searchParams.get('reason') ?? 'Unknown error')
+    fetchXeroStatus(activeBrand.brand_id)
+  }, [activeBrand?.brand_id, searchParams, fetchXeroStatus]) // eslint-disable-line react-hooks/exhaustive-deps
 
   // Load team members when team tab selected
   useEffect(() => {
@@ -706,6 +737,22 @@ export default function SettingsPage() {
       body: JSON.stringify({ member_id: memberId }),
     })
     setTeamMembers((m) => m.filter((p) => p.id !== memberId))
+  }
+
+  async function handleXeroDisconnect(xeroTenantId: string) {
+    if (!activeBrand) return
+    if (!confirm('Disconnect Xero? This will stop financial data syncing.')) return
+    setXeroDisconnecting(true)
+    try {
+      await fetch('/api/xero/disconnect', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ brand_id: activeBrand.brand_id, xero_tenant_id: xeroTenantId }),
+      })
+      await fetchXeroStatus(activeBrand.brand_id)
+    } finally {
+      setXeroDisconnecting(false)
+    }
   }
 
   const isReadOnly = userRole !== 'admin'
@@ -1083,6 +1130,83 @@ export default function SettingsPage() {
                   </div>
                   <ConnectedBadge connected={false} />
                 </div>
+              </div>
+
+              {/* Xero */}
+              <div className="border-t border-gray-100 pt-4 space-y-3">
+                <div className="flex items-center justify-between">
+                  <div>
+                    <span className="text-sm font-medium text-gray-900">Xero</span>
+                    <span className="ml-2 text-xs text-gray-400">Financial accounting</span>
+                  </div>
+                  <ConnectedBadge connected={xeroStatus?.connected ?? false} />
+                </div>
+
+                {/* Success / error banners */}
+                {xeroSuccessBanner && (
+                  <div className="flex items-center justify-between px-3 py-2 bg-green-50 border border-green-200 rounded-md text-xs text-green-700">
+                    <span>✓ Xero connected successfully</span>
+                    <button onClick={() => setXeroSuccessBanner(false)} className="ml-3 text-green-500 hover:text-green-700">✕</button>
+                  </div>
+                )}
+                {xeroErrorBanner && (
+                  <div className="flex items-center justify-between px-3 py-2 bg-red-50 border border-red-200 rounded-md text-xs text-red-700">
+                    <span>Xero connection failed: {xeroErrorBanner}</span>
+                    <button onClick={() => setXeroErrorBanner(null)} className="ml-3 text-red-400 hover:text-red-600">✕</button>
+                  </div>
+                )}
+
+                {xeroLoading ? (
+                  <div className="h-8 bg-gray-100 rounded animate-pulse" />
+                ) : xeroStatus?.configured === false ? (
+                  <p className="text-xs text-gray-400">
+                    Xero not configured — add <code className="bg-gray-100 px-1 rounded">XERO_CLIENT_ID</code> and <code className="bg-gray-100 px-1 rounded">XERO_CLIENT_SECRET</code> to your Vercel environment variables.
+                  </p>
+                ) : xeroStatus?.connected ? (
+                  <div className="space-y-3">
+                    {xeroStatus.tenants.map((t) => (
+                      <div key={t.xero_tenant_id} className="flex items-center justify-between px-3 py-2 bg-gray-50 border border-gray-200 rounded-md">
+                        <div>
+                          <div className="text-sm font-medium text-gray-800">{t.xero_tenant_name}</div>
+                          <div className="text-xs text-gray-400 mt-0.5">
+                            Connected {new Date(t.connected_at).toLocaleDateString()}
+                            {t.last_sync && ` · Last sync ${new Date(t.last_sync).toLocaleDateString()}`}
+                          </div>
+                        </div>
+                        <div className="flex items-center gap-2">
+                          <button
+                            type="button"
+                            disabled
+                            className="px-2 py-1 text-xs rounded border border-gray-200 text-gray-400 cursor-not-allowed"
+                            title="Xero sync coming in a future phase"
+                          >
+                            Sync now
+                          </button>
+                          <button
+                            type="button"
+                            onClick={() => handleXeroDisconnect(t.xero_tenant_id)}
+                            disabled={xeroDisconnecting || isReadOnly}
+                            className="px-2 py-1 text-xs rounded border border-red-200 text-red-600 hover:bg-red-50 disabled:opacity-50 transition-colors"
+                          >
+                            {xeroDisconnecting ? 'Disconnecting…' : 'Disconnect'}
+                          </button>
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+                ) : (
+                  <div>
+                    <a
+                      href={activeBrand ? `/api/xero/connect?brand_id=${activeBrand.brand_id}` : '#'}
+                      className="inline-flex items-center gap-2 px-3 py-2 text-sm rounded-md border border-gray-200 text-gray-700 hover:bg-gray-50 transition-colors"
+                    >
+                      Connect Xero
+                    </a>
+                    <p className="mt-2 text-xs text-gray-400">
+                      Authorises read-only access to your Xero accounting data for financial monitoring.
+                    </p>
+                  </div>
+                )}
               </div>
             </Section>
           )
