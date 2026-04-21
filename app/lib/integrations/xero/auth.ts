@@ -9,12 +9,13 @@ export const XERO_SCOPES = [
   'openid',
   'profile',
   'email',
-  'accounting.reports.read',
+  'accounting.invoices.read',
+  'accounting.payments.read',
+  'accounting.banktransactions.read',
   'accounting.contacts.read',
-  'accounting.contacts',
-  'accounting.transactions.read',
-  'accounting.transactions',
   'accounting.settings.read',
+  'accounting.reports.read',
+  'accounting.budgets.read',
 ].join(' ')
 
 export interface XeroTokenResponse {
