@@ -14,7 +14,11 @@ export const XERO_SCOPES = [
   'accounting.banktransactions.read',
   'accounting.contacts.read',
   'accounting.settings.read',
-  'accounting.reports.read',
+  'accounting.reports.profitandloss.read',
+  'accounting.reports.balancesheet.read',
+  'accounting.reports.banksummary.read',
+  'accounting.reports.budgetsummary.read',
+  'accounting.reports.executivesummary.read',
   'accounting.budgets.read',
 ].join(' ')
 
