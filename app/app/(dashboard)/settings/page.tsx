@@ -425,6 +425,15 @@ export default function SettingsPage() {
   const [xeroSuccessBanner, setXeroSuccessBanner] = useState(false)
   const [xeroErrorBanner, setXeroErrorBanner] = useState<string | null>(null)
 
+  // Telegram
+  type TelegramSubscriber = { id: string; telegram_chat_id: number; telegram_username: string | null; user_role: string; alerts_enabled: boolean; daily_digest: boolean; created_at: string }
+  const [telegramStatus, setTelegramStatus] = useState<{ configured: boolean; subscribers: TelegramSubscriber[] } | null>(null)
+  const [telegramLoading, setTelegramLoading] = useState(false)
+  const [newChatId, setNewChatId] = useState('')
+  const [newUsername, setNewUsername] = useState('')
+  const [telegramAddState, setTelegramAddState] = useState<'idle' | 'saving' | 'ok' | 'fail'>('idle')
+  const [telegramTestState, setTelegramTestState] = useState<'idle' | 'sending' | 'ok' | 'fail'>('idle')
+
   // Team
   const [teamMembers, setTeamMembers] = useState<Profile[]>([])
   const [teamLoading, setTeamLoading] = useState(false)
@@ -535,14 +544,29 @@ export default function SettingsPage() {
     fetchXeroStatus(activeBrand.brand_id)
   }, [activeBrand?.brand_id, searchParams, fetchXeroStatus]) // eslint-disable-line react-hooks/exhaustive-deps
 
+  const fetchTelegramStatus = useCallback(async (brandId: string) => {
+    setTelegramLoading(true)
+    try {
+      const res = await fetch(`/api/telegram/send?brand_id=${brandId}`)
+      if (res.ok) setTelegramStatus(await res.json())
+    } catch { /* ignore */ } finally {
+      setTelegramLoading(false)
+    }
+  }, [])
+
+  useEffect(() => {
+    if (activeBrand && activeTab === 'integrations') fetchTelegramStatus(activeBrand.brand_id)
+  }, [activeBrand?.brand_id, activeTab, fetchTelegramStatus]) // eslint-disable-line react-hooks/exhaustive-deps
+
   // Load team members when team tab selected
   useEffect(() => {
     if (activeTab !== 'team' || !activeBrand) return
     setTeamLoading(true)
-    supabase.from('profiles').select('*').eq('brand_id', activeBrand.brand_id).order('created_at').then(({ data }) => {
-      setTeamMembers((data as Profile[]) ?? [])
-      setTeamLoading(false)
-    })
+    fetch(`/api/team/members?brand_id=${activeBrand.brand_id}`)
+      .then(r => r.json())
+      .then(data => setTeamMembers((data.members as Profile[]) ?? []))
+      .catch(() => setTeamMembers([]))
+      .finally(() => setTeamLoading(false))
   }, [activeTab, activeBrand?.brand_id]) // eslint-disable-line react-hooks/exhaustive-deps
 
   // ── Save helpers ──────────────────────────────────────────────────────────
@@ -753,6 +777,53 @@ export default function SettingsPage() {
     } finally {
       setXeroDisconnecting(false)
     }
+  }
+
+  async function handleAddTelegramSubscriber() {
+    if (!activeBrand || !newChatId.trim()) return
+    setTelegramAddState('saving')
+    try {
+      const res = await fetch('/api/telegram/subscribers', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ brand_id: activeBrand.brand_id, telegram_chat_id: parseInt(newChatId), telegram_username: newUsername.trim() || null }),
+      })
+      if (res.ok) {
+        setTelegramAddState('ok')
+        setNewChatId('')
+        setNewUsername('')
+        fetchTelegramStatus(activeBrand.brand_id)
+        setTimeout(() => setTelegramAddState('idle'), 2000)
+      } else {
+        setTelegramAddState('fail')
+        setTimeout(() => setTelegramAddState('idle'), 3000)
+      }
+    } catch { setTelegramAddState('fail'); setTimeout(() => setTelegramAddState('idle'), 3000) }
+  }
+
+  async function handleRemoveTelegramSubscriber(id: string) {
+    if (!activeBrand || !confirm('Remove this subscriber?')) return
+    await fetch('/api/telegram/subscribers', { method: 'DELETE', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ id }) })
+    fetchTelegramStatus(activeBrand.brand_id)
+  }
+
+  async function handleToggleTelegramSubscriber(id: string, field: 'alerts_enabled' | 'daily_digest', value: boolean) {
+    await fetch('/api/telegram/subscribers', { method: 'PATCH', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ id, [field]: value }) })
+    setTelegramStatus(s => s ? { ...s, subscribers: s.subscribers.map(sub => sub.id === id ? { ...sub, [field]: value } : sub) } : s)
+  }
+
+  async function handleTelegramTest(chatId: number) {
+    if (!activeBrand) return
+    setTelegramTestState('sending')
+    try {
+      const res = await fetch('/api/telegram/send', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${process.env.NEXT_PUBLIC_CRON_SECRET ?? ''}` },
+        body: JSON.stringify({ brand_id: activeBrand.brand_id, chat_id: chatId, message: '✅ AGOS test message — your Telegram integration is working!' }),
+      })
+      setTelegramTestState(res.ok ? 'ok' : 'fail')
+    } catch { setTelegramTestState('fail') }
+    setTimeout(() => setTelegramTestState('idle'), 3000)
   }
 
   const isReadOnly = userRole !== 'admin'
@@ -1204,6 +1275,106 @@ export default function SettingsPage() {
                     </a>
                     <p className="mt-2 text-xs text-gray-400">
                       Authorises read-only access to your Xero accounting data for financial monitoring.
+                    </p>
+                  </div>
+                )}
+              </div>
+
+              {/* Telegram */}
+              <div className="border-t border-gray-100 pt-4 space-y-3">
+                <div className="flex items-center justify-between">
+                  <div>
+                    <span className="text-sm font-medium text-gray-900">Telegram Bot</span>
+                    <span className="ml-2 text-xs text-gray-400">COO alerts &amp; daily digest</span>
+                  </div>
+                  <ConnectedBadge connected={!!(telegramStatus?.configured && telegramStatus.subscribers.length > 0)} />
+                </div>
+
+                {telegramLoading ? (
+                  <div className="h-8 bg-gray-100 rounded animate-pulse" />
+                ) : !telegramStatus?.configured ? (
+                  <p className="text-xs text-gray-400">
+                    Telegram not configured — add <code className="bg-gray-100 px-1 rounded">TELEGRAM_BOT_TOKEN</code> and <code className="bg-gray-100 px-1 rounded">TELEGRAM_WEBHOOK_SECRET</code> to your Vercel environment variables, then register the webhook.
+                  </p>
+                ) : (
+                  <div className="space-y-3">
+                    {telegramStatus.subscribers.length > 0 ? (
+                      telegramStatus.subscribers.map(sub => (
+                        <div key={sub.id} className="border border-gray-200 rounded-md overflow-hidden">
+                          <div className="flex items-center justify-between px-3 py-2 bg-gray-50">
+                            <div>
+                              <div className="text-sm font-medium text-gray-800">
+                                {sub.telegram_username ? `@${sub.telegram_username}` : `Chat ${sub.telegram_chat_id}`}
+                              </div>
+                              <div className="text-xs text-gray-400 mt-0.5">ID: {sub.telegram_chat_id} · {sub.user_role}</div>
+                            </div>
+                            <div className="flex items-center gap-2">
+                              <button
+                                type="button"
+                                onClick={() => handleTelegramTest(sub.telegram_chat_id)}
+                                disabled={telegramTestState === 'sending'}
+                                className="px-2 py-1 text-xs rounded border border-gray-200 text-gray-600 hover:bg-gray-50 disabled:opacity-50 transition-colors"
+                              >
+                                {telegramTestState === 'sending' ? 'Sending…' : telegramTestState === 'ok' ? '✓ Sent' : telegramTestState === 'fail' ? 'Failed' : 'Test'}
+                              </button>
+                              <button
+                                type="button"
+                                onClick={() => handleRemoveTelegramSubscriber(sub.id)}
+                                className="px-2 py-1 text-xs rounded border border-red-200 text-red-600 hover:bg-red-50 transition-colors"
+                              >
+                                Remove
+                              </button>
+                            </div>
+                          </div>
+                          <div className="px-3 py-2 flex gap-6">
+                            <label className="flex items-center gap-2 text-xs text-gray-600 cursor-pointer">
+                              <input type="checkbox" checked={sub.alerts_enabled} onChange={e => handleToggleTelegramSubscriber(sub.id, 'alerts_enabled', e.target.checked)} className="rounded" />
+                              Alerts
+                            </label>
+                            <label className="flex items-center gap-2 text-xs text-gray-600 cursor-pointer">
+                              <input type="checkbox" checked={sub.daily_digest} onChange={e => handleToggleTelegramSubscriber(sub.id, 'daily_digest', e.target.checked)} className="rounded" />
+                              Daily digest
+                            </label>
+                          </div>
+                        </div>
+                      ))
+                    ) : (
+                      <p className="text-xs text-gray-400">Bot active — add your Telegram chat ID below to receive alerts.</p>
+                    )}
+
+                    {/* Add subscriber */}
+                    <div className="flex gap-2 items-end">
+                      <div>
+                        <p className="text-xs text-gray-500 mb-1">Chat ID</p>
+                        <input
+                          type="number"
+                          value={newChatId}
+                          onChange={e => setNewChatId(e.target.value)}
+                          placeholder="123456789"
+                          className="block w-36 rounded-md border border-gray-200 px-2 py-1.5 text-sm focus:outline-none focus:ring-2 focus:ring-gray-900"
+                        />
+                      </div>
+                      <div>
+                        <p className="text-xs text-gray-500 mb-1">Username (optional)</p>
+                        <input
+                          type="text"
+                          value={newUsername}
+                          onChange={e => setNewUsername(e.target.value)}
+                          placeholder="yourusername"
+                          className="block w-36 rounded-md border border-gray-200 px-2 py-1.5 text-sm focus:outline-none focus:ring-2 focus:ring-gray-900"
+                        />
+                      </div>
+                      <button
+                        type="button"
+                        onClick={handleAddTelegramSubscriber}
+                        disabled={!newChatId.trim() || telegramAddState === 'saving'}
+                        className="px-3 py-1.5 text-sm rounded-md border border-gray-200 text-gray-700 hover:bg-gray-50 disabled:opacity-50 transition-colors"
+                      >
+                        {telegramAddState === 'saving' ? 'Adding…' : telegramAddState === 'ok' ? '✓ Added' : 'Add'}
+                      </button>
+                    </div>
+                    <p className="text-xs text-gray-400">
+                      Get your chat ID by messaging <code className="bg-gray-100 px-1 rounded">@userinfobot</code> on Telegram.
                     </p>
                   </div>
                 )}

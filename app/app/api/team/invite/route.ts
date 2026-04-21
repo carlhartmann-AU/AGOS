@@ -1,7 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { createClient } from '@/lib/supabase/server'
 import { createAdminClient } from '@/lib/supabase/admin'
-import { checkUserLimit } from '@/lib/plan-limits'
 import type { UserRole } from '@/types'
 
 export async function POST(request: NextRequest) {
@@ -9,8 +8,9 @@ export async function POST(request: NextRequest) {
   const { data: { user } } = await supabase.auth.getUser()
   if (!user) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
 
-  // Verify the calling user is an admin for this brand
-  const { data: callerProfile } = await supabase
+  // Use admin client — avoids RLS recursion on profiles table
+  const admin = createAdminClient()
+  const { data: callerProfile } = await admin
     .from('profiles')
     .select('role, brand_id')
     .eq('id', user.id)
@@ -31,16 +31,7 @@ export async function POST(request: NextRequest) {
     return NextResponse.json({ error: 'Invalid role' }, { status: 400 })
   }
 
-  // Check user limit
-  const limit = await checkUserLimit(brand_id)
-  if (!limit.allowed) {
-    return NextResponse.json({
-      error: `User limit reached for your plan (${limit.current}/${limit.limit}). Upgrade to add more team members.`,
-    }, { status: 403 })
-  }
-
   // Send invite via Supabase Admin API
-  const admin = createAdminClient()
   const { data: inviteData, error: inviteError } = await admin.auth.admin.inviteUserByEmail(email, {
     data: { brand_id, role },
     redirectTo: `${process.env.NEXT_PUBLIC_APP_URL ?? ''}/reset-password`,

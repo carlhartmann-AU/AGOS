@@ -2,10 +2,10 @@ import { ContentStudio } from '@/components/ContentStudio'
 
 export default function ContentStudioPage() {
   return (
-    <div className="space-y-6">
-      <div>
-        <h1 className="text-xl font-semibold text-gray-900">Content Studio</h1>
-        <p className="text-sm text-gray-500 mt-1">
+    <div className="page">
+      <div style={{ marginBottom: 20 }}>
+        <h1 className="page-title">Content Studio</h1>
+        <p className="page-sub">
           Generate brand-compliant content for Plasmaide — blog articles, landing pages, emails, and social captions.
         </p>
       </div>

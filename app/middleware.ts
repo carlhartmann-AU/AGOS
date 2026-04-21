@@ -43,7 +43,11 @@ export async function middleware(request: NextRequest) {
   const XERO_OAUTH_PATHS = ['/api/xero/connect', '/api/xero/callback']
   const isXeroOAuth = XERO_OAUTH_PATHS.some((p) => pathname.startsWith(p))
 
-  if (!user && !isPublicPath && !isXeroOAuth) {
+  // Telegram webhook and send routes — authenticated by their own secrets
+  const TELEGRAM_PATHS = ['/api/telegram/webhook', '/api/telegram/send']
+  const isTelegram = TELEGRAM_PATHS.some((p) => pathname.startsWith(p))
+
+  if (!user && !isPublicPath && !isXeroOAuth && !isTelegram) {
     const url = request.nextUrl.clone()
     url.pathname = '/login'
     return NextResponse.redirect(url)

@@ -80,8 +80,8 @@ function Nav({ route, go }) {
           ))}
         </nav>
         <div className="nav-cta">
-          <a className="btn ghost" href="#" onClick={e=>e.preventDefault()}>Sign in</a>
-          <a className="btn primary" href="#" onClick={e=>e.preventDefault()}>Book a demo <Icon name="arrow"/></a>
+          <a className="btn ghost" href="https://dashboard.agos-app.com/login">Sign in</a>
+          <a className="btn primary" href="#contact" onClick={e=>{e.preventDefault();go("contact");}}>Book a demo <Icon name="arrow"/></a>
         </div>
       </div>
     </div>
@@ -170,6 +170,7 @@ function Reveal({ children, delay=0 }) {
 }
 
 function BigCTA() {
+  const goContact = (e) => { e.preventDefault(); location.hash = "contact"; window.scrollTo({top:0,behavior:"smooth"}); };
   return (
     <section style={{padding:"48px 0 96px",borderBottom:0}}>
       <div className="wrap">
@@ -178,8 +179,8 @@ function BigCTA() {
           <h2>Your entire eCommerce team, <em style={{fontStyle:"normal",background:"linear-gradient(180deg,#b7ccff 20%,#7a9dff 100%)",WebkitBackgroundClip:"text",WebkitTextFillColor:"transparent"}}>autonomous</em>.</h2>
           <p>Replace $8–20K / month of fragmented tools, freelancers, and agencies with a single operating system.</p>
           <div className="cta-row">
-            <a href="#" className="btn primary lg">Start 14-day free trial <Icon name="arrow"/></a>
-            <a href="#" className="btn ghost lg">Book a demo</a>
+            <a href="#contact" onClick={goContact} className="btn primary lg">Start 14-day free trial <Icon name="arrow"/></a>
+            <a href="#contact" onClick={goContact} className="btn ghost lg">Book a demo</a>
           </div>
         </div>
       </div>

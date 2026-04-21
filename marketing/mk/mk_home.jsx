@@ -22,8 +22,8 @@ function Home({ go }) {
           <h1 className="display" style={{marginTop:0}}>Your entire eCommerce team, <em>autonomous.</em></h1>
           <p className="sub-lead">AGOS replaces the $8–20K / month stack of fragmented tools, freelancers, and agencies with a single operating system — twelve specialized AI agents coordinated by a digital COO, with humans in the loop where it matters.</p>
           <div className="hero-cta">
-            <a href="#" className="btn primary lg">Start 14-day free trial <Icon name="arrow"/></a>
-            <a href="#" onClick={e=>{e.preventDefault();go("features");}} className="btn ghost lg">See how it works</a>
+            <a href="#contact" onClick={e=>{e.preventDefault();go("contact");}} className="btn primary lg">Start 14-day free trial <Icon name="arrow"/></a>
+            <a href="#features" onClick={e=>{e.preventDefault();go("features");}} className="btn ghost lg">See how it works</a>
           </div>
           <Reveal>
             <div className="hero-canvas">

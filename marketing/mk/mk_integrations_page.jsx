@@ -14,8 +14,8 @@ function IntegrationsPage({ go }) {
             Shopify, your email platform, your attribution tool, your accounting. AGOS reads from them, reasons across them, and writes back through the approval queue. No data migration. No CSV exports. No new system of record.
           </p>
           <div style={{display:"flex", gap:10, marginTop:28, flexWrap:"wrap"}}>
-            <a href="#" onClick={e=>e.preventDefault()} className="btn primary lg">Book a demo <Icon name="arrow"/></a>
-            <a href="#" onClick={e=>e.preventDefault()} className="btn ghost lg">Request an integration</a>
+            <a href="#contact" onClick={e=>{e.preventDefault();go("contact");}} className="btn primary lg">Book a demo <Icon name="arrow"/></a>
+            <a href="#contact" onClick={e=>{e.preventDefault();go("contact");}} className="btn ghost lg">Request an integration</a>
           </div>
         </div>
       </section>

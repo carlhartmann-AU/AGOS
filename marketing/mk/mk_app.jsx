@@ -15,6 +15,7 @@ function App() {
   else if (route==="usecases") page = <UseCases go={go}/>;
   else if (route==="docs") page = <Docs go={go}/>;
   else if (route==="security") page = <Security go={go}/>;
+  else if (route==="contact") page = <Contact go={go}/>;
 
   return (
     <>

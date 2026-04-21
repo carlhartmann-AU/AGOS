@@ -117,13 +117,14 @@ export async function getKPIs(
   const new_customers = (rows ?? []).reduce((s, r) => s + Number(r.new_customers ?? 0), 0)
   const returning_customers = (rows ?? []).reduce((s, r) => s + Number(r.returning_customers ?? 0), 0)
 
-  // Latest sync timestamp
-  const { data: syncRow } = await supabase
-    .from('tw_sync_log')
-    .select('completed_at, started_at, status')
+  // Latest sync timestamp: read from tw_daily_summary.synced_at — the actual write time
+  // of the most recent data row. tw_sync_log.completed_at can be null or stale when the
+  // sync process records completion before the upsert finishes.
+  const { data: latestRow } = await supabase
+    .from('tw_daily_summary')
+    .select('synced_at')
     .eq('brand_id', brandId)
-    .eq('status', 'success')
-    .order('completed_at', { ascending: false })
+    .order('synced_at', { ascending: false })
     .limit(1)
     .maybeSingle()
 
@@ -137,7 +138,7 @@ export async function getKPIs(
     new_customers,
     returning_customers,
     daily,
-    last_synced_at: syncRow?.completed_at ?? syncRow?.started_at ?? null,
+    last_synced_at: latestRow?.synced_at ?? null,
     days_cached: daily.length,
     days_expected: expectedDays,
   }

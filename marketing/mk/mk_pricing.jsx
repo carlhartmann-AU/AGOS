@@ -25,7 +25,7 @@ function Pricing({ go }) {
                 <ul className="feats">
                   {t.feat.map((f,j)=>(<li key={j}><span className="c"><Icon name="check"/></span>{f}</li>))}
                 </ul>
-                <a href="#" className={`btn ${t.feat_flag?"primary":"ghost-dark"} lg`} style={{marginTop:"auto",justifyContent:"center"}}>{t.cta}</a>
+                <a href="#contact" onClick={e=>{e.preventDefault();go("contact");}} className={`btn ${t.feat_flag?"primary":"ghost-dark"} lg`} style={{marginTop:"auto",justifyContent:"center"}}>{t.cta}</a>
               </div>
             ))}
           </div>

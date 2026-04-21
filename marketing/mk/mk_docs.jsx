@@ -12,7 +12,7 @@ function Docs({ go }) {
           <h1 style={{color:"#fff",fontSize:"clamp(36px,5vw,60px)",letterSpacing:"-0.03em",lineHeight:1.05,fontWeight:500,margin:"8px 0 18px",maxWidth:920,textWrap:"balance"}}>From sign-up to your first agent-generated campaign — in 30 minutes.</h1>
           <p style={{fontSize:18,color:"var(--nav-ink)",maxWidth:680,margin:0,lineHeight:1.55}}>No migration. No onboarding call required. Connect Shopify, paste your brand voice, press generate. You'll have a reviewable draft before coffee goes cold.</p>
           <div style={{display:"flex",gap:10,flexWrap:"wrap",marginTop:28}}>
-            <a href="#" className="btn primary lg">Start free trial <Icon name="arrow"/></a>
+            <a href="#contact" onClick={e=>{e.preventDefault();go("contact");}} className="btn primary lg">Start free trial <Icon name="arrow"/></a>
             <a href="#features" onClick={e=>{e.preventDefault();go("features");}} className="btn ghost lg">See how it works</a>
           </div>
         </div>
