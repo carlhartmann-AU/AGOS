@@ -460,6 +460,55 @@ export async function executeToolCall(
       return result
     }
 
+    case 'get_products': {
+      const status = input.status as string | undefined
+      const search = input.search as string | undefined
+      const limit = Math.min((input.limit as number | undefined) ?? 20, 20)
+
+      let query = supabase
+        .from('products')
+        .select('id, shopify_product_id, title, status, vendor, product_type, tags, featured_image_url, product_variants(title, sku, price, currency, inventory_quantity)')
+        .eq('brand_id', brandId)
+        .order('title', { ascending: true })
+        .limit(limit)
+
+      if (status) query = query.eq('status', status)
+      if (search) query = query.ilike('title', `%${search}%`)
+
+      const { data } = await query
+
+      const totalInventory = (data ?? []).reduce((sum, p) => {
+        const inv = (p.product_variants as Array<{ inventory_quantity: number | null }> ?? [])
+          .reduce((s, v) => s + (v.inventory_quantity ?? 0), 0)
+        return sum + inv
+      }, 0)
+
+      return {
+        ok: true,
+        count: data?.length ?? 0,
+        total_inventory: totalInventory,
+        products: (data ?? []).map(p => ({
+          id: p.id,
+          title: p.title,
+          status: p.status,
+          vendor: p.vendor,
+          product_type: p.product_type,
+          variants_count: (p.product_variants as unknown[]).length,
+          price_range: (() => {
+            const prices = (p.product_variants as Array<{ price: number | null }> ?? [])
+              .map(v => v.price ?? 0)
+              .filter(n => n > 0)
+            if (!prices.length) return null
+            const min = Math.min(...prices)
+            const max = Math.max(...prices)
+            return min === max ? `${min}` : `${min}–${max}`
+          })(),
+          inventory: (p.product_variants as Array<{ inventory_quantity: number | null }> ?? [])
+            .reduce((s, v) => s + (v.inventory_quantity ?? 0), 0),
+        })),
+      }
+    }
+
     case 'analyse_reviews': {
       const reviews = input.reviews as Array<{
         source: string

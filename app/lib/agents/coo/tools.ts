@@ -193,6 +193,18 @@ export const COO_TOOLS: COOTool[] = [
     },
   },
   {
+    name: 'get_products',
+    description: "Get the brand's product catalog with details, variants, pricing, and inventory. Returns up to 20 products per call — use search/status filters to narrow results.",
+    input_schema: {
+      type: 'object',
+      properties: {
+        status: { type: 'string', enum: ['active', 'draft', 'archived'], description: 'Filter by product status' },
+        search: { type: 'string', description: 'Search products by title' },
+        limit: { type: 'number', description: 'Max products to return (default 20, max 20)', default: 20 },
+      },
+    },
+  },
+  {
     name: 'analyse_reviews',
     description: 'Submit new customer reviews for sentiment analysis and theme extraction.',
     input_schema: {

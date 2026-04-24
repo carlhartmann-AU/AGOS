@@ -17,6 +17,7 @@ function NavIcon({ name }: { name: string }) {
     case 'perf':     return <svg {...props}><path d="M2 13h12"/><rect x="3" y="8" width="2" height="5"/><rect x="7" y="5" width="2" height="8"/><rect x="11" y="10" width="2" height="3"/></svg>
     case 'fin':      return <svg {...props}><path d="M3 10h10M3 6h4M3 14h6"/><path d="M11 4v8M9 6l2-2 2 2"/></svg>
     case 'coo':      return <svg {...props}><path d="M9 1L3 9h4l-1 6 6-8H8z"/></svg>
+    case 'products': return <svg {...props}><rect x="2" y="3" width="12" height="10" rx="1"/><path d="M5 3V1M11 3V1M2 7h12"/></svg>
     case 'settings': return <svg {...props}><circle cx="8" cy="8" r="2"/><path d="M8 1v3M8 12v3M1 8h3M12 8h3M3 3l2 2M11 11l2 2M3 13l2-2M11 5l2-2"/></svg>
     case 'chev':     return <svg {...props}><path d="M4 6l4 4 4-4"/></svg>
     default:         return null
@@ -47,6 +48,7 @@ type NavItem = { key: string; href: string; label: string; icon: string; roles?:
 const NAV_ITEMS: NavItem[] = [
   { key: 'dashboard',      href: '/dashboard',       label: 'Dashboard',       icon: 'dash' },
   { key: 'content-studio', href: '/content-studio',  label: 'Content Studio',  icon: 'studio', roles: ['admin', 'approver'] },
+  { key: 'products',       href: '/products',        label: 'Products',        icon: 'products' },
   { key: 'approvals',      href: '/approvals/content', label: 'Approvals',     icon: 'approve' },
   { key: 'financial',      href: '/financial',        label: 'Financial',       icon: 'fin' },
   { key: 'performance',    href: '/performance',     label: 'Performance',     icon: 'perf' },

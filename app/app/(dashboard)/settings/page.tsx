@@ -89,9 +89,6 @@ type CooForm = { slack_channel: string; coo_channel_slack: boolean; coo_channel_
 type AIForm = { llm_provider: string; llm_model: string; llm_api_key: string }
 
 type IntegForm = {
-  shopify_store_url: string
-  shopify_blog_id: string
-  shopify_access_token: string
   dotdigital_endpoint: string
   n8n_webhook_base: string
   triple_whale_api_key: string
@@ -413,9 +410,18 @@ export default function SettingsPage() {
   const [aiTestResult, setAiTestResult] = useState<'ok' | 'fail' | null>(null)
 
   // Integrations
-  const [integForm, setIntegForm] = useState<IntegForm>({ shopify_store_url: '', shopify_blog_id: '', shopify_access_token: '', dotdigital_endpoint: '', n8n_webhook_base: '', triple_whale_api_key: '', triple_whale_shop_domain: '' })
+  const [integForm, setIntegForm] = useState<IntegForm>({ dotdigital_endpoint: '', n8n_webhook_base: '', triple_whale_api_key: '', triple_whale_shop_domain: '' })
   const [twTestState, setTwTestState] = useState<'idle' | 'testing' | 'ok' | 'fail'>('idle')
   const [integSave, setIntegSave] = useState<SectionSave>({ state: 'idle', error: null })
+
+  // Shopify OAuth connection
+  type ShopifyConnectionStatus = { shop_domain: string; shop_name: string | null; sync_status: string; sync_error: string | null; connected_at: string; last_sync_at: string | null }
+  const [shopifyStatus, setShopifyStatus] = useState<{ configured: boolean; connected: boolean; connection: ShopifyConnectionStatus | null } | null>(null)
+  const [shopifyLoading, setShopifyLoading] = useState(false)
+  const [shopifyDisconnecting, setShopifyDisconnecting] = useState(false)
+  const [shopifySyncing, setShopifySyncing] = useState(false)
+  const [shopifySuccessBanner, setShopifySuccessBanner] = useState(false)
+  const [shopifyErrorBanner, setShopifyErrorBanner] = useState<string | null>(null)
 
   // Xero OAuth connection
   type XeroTenantStatus = { xero_tenant_id: string; xero_tenant_name: string; connected_at: string; last_sync: string | null }
@@ -502,9 +508,6 @@ export default function SettingsPage() {
       const integ = s.integrations ?? {} as IntegrationsConfig
       const twInteg = integ?.triple_whale as Record<string, string | boolean | null> | undefined
       setIntegForm({
-        shopify_store_url: (integ?.shopify?.store_url as string | null) ?? '',
-        shopify_blog_id: (integ?.shopify?.blog_id as string | null) ?? '',
-        shopify_access_token: '',  // never prefill tokens
         dotdigital_endpoint: (integ?.dotdigital?.endpoint as string | null) ?? '',
         n8n_webhook_base: (integ?.n8n_webhook_base as string | null) ?? '',
         triple_whale_api_key: '',  // never prefill tokens
@@ -523,6 +526,58 @@ export default function SettingsPage() {
     return () => { saveTimers.current.forEach(clearTimeout) }
   }, [loadData])
 
+  // Shopify status + handlers
+  const fetchShopifyStatus = useCallback(async (brandId: string) => {
+    setShopifyLoading(true)
+    try {
+      const res = await fetch(`/api/integrations/shopify/status?brand_id=${brandId}`)
+      if (res.ok) setShopifyStatus(await res.json())
+    } catch { /* ignore */ } finally {
+      setShopifyLoading(false)
+    }
+  }, [])
+
+  useEffect(() => {
+    if (!activeBrand) return
+    const shopifyParam = searchParams.get('shopify')
+    const tab = searchParams.get('tab')
+    if (tab === 'integrations') setActiveTab('integrations')
+    if (shopifyParam === 'connected') setShopifySuccessBanner(true)
+    if (shopifyParam === 'error') setShopifyErrorBanner(searchParams.get('reason') ?? 'Unknown error')
+    fetchShopifyStatus(activeBrand.brand_id)
+  }, [activeBrand?.brand_id, searchParams, fetchShopifyStatus]) // eslint-disable-line react-hooks/exhaustive-deps
+
+  async function handleShopifyDisconnect() {
+    if (!activeBrand || !shopifyStatus?.connection) return
+    if (!confirm('Disconnect Shopify? Product sync will stop, but existing synced data is preserved.')) return
+    setShopifyDisconnecting(true)
+    try {
+      await fetch('/api/integrations/shopify/disconnect', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ brand_id: activeBrand.brand_id, shop_domain: shopifyStatus.connection.shop_domain }),
+      })
+      await fetchShopifyStatus(activeBrand.brand_id)
+    } finally {
+      setShopifyDisconnecting(false)
+    }
+  }
+
+  async function handleShopifySync() {
+    if (!activeBrand) return
+    setShopifySyncing(true)
+    try {
+      await fetch('/api/integrations/shopify/sync-products', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ brand_id: activeBrand.brand_id }),
+      })
+      await fetchShopifyStatus(activeBrand.brand_id)
+    } catch { /* ignore */ } finally {
+      setShopifySyncing(false)
+    }
+  }
+
   // Handle Xero OAuth return params + fetch Xero status
   const fetchXeroStatus = useCallback(async (brandId: string) => {
     setXeroLoading(true)
@@ -537,8 +592,6 @@ export default function SettingsPage() {
   useEffect(() => {
     if (!activeBrand) return
     const xeroParam = searchParams.get('xero')
-    const tab = searchParams.get('tab')
-    if (tab === 'integrations') setActiveTab('integrations')
     if (xeroParam === 'connected') setXeroSuccessBanner(true)
     if (xeroParam === 'error') setXeroErrorBanner(searchParams.get('reason') ?? 'Unknown error')
     fetchXeroStatus(activeBrand.brand_id)
@@ -653,19 +706,11 @@ export default function SettingsPage() {
   async function saveIntegrations() {
     setIntegSave({ state: 'saving', error: null })
     try {
-      // Read existing integrations first so we don't wipe stored tokens when fields are blank
       const existing = (brandSettings?.integrations ?? {}) as Record<string, Record<string, string | boolean | null> | string | null>
-      const existingShopify = existing.shopify as Record<string, string | boolean | null> | undefined
       const existingTw = existing.triple_whale as Record<string, string | boolean | null> | undefined
 
       const integrations = {
-        shopify: {
-          connected: !!(integForm.shopify_store_url && integForm.shopify_blog_id),
-          store_url: integForm.shopify_store_url || (existingShopify?.store_url ?? null),
-          blog_id: integForm.shopify_blog_id || (existingShopify?.blog_id ?? null),
-          // Only update token if a new one was entered; otherwise keep existing
-          access_token: integForm.shopify_access_token.trim() || (existingShopify?.access_token ?? null),
-        },
+        shopify: existing.shopify ?? { connected: false },
         dotdigital: { connected: !!integForm.dotdigital_endpoint, endpoint: integForm.dotdigital_endpoint || null },
         gorgias: { connected: false },
         triple_whale: {
@@ -675,10 +720,9 @@ export default function SettingsPage() {
         },
         n8n_webhook_base: integForm.n8n_webhook_base || null,
       }
-      await upsertBrandSettings({ integrations } as Partial<BrandSettingsRow>)
+      await upsertBrandSettings({ integrations } as unknown as Partial<BrandSettingsRow>)
       if (integForm.n8n_webhook_base) await upsertConfig({ n8n_webhook_base: integForm.n8n_webhook_base })
-      // Clear sensitive fields after save
-      setIntegForm((f) => ({ ...f, shopify_access_token: '', triple_whale_api_key: '' }))
+      setIntegForm((f) => ({ ...f, triple_whale_api_key: '' }))
       afterSave(setIntegSave, null)
     } catch (e) { afterSave(setIntegSave, e instanceof Error ? e.message : 'Save failed') }
   }
@@ -1103,32 +1147,82 @@ export default function SettingsPage() {
           loading ? <SkeletonSection /> : (
             <Section title="Integrations" description="Platform connections for publishing and automation." save={integSave} onSave={saveIntegrations} readOnly={isReadOnly}>
 
-              {/* Shopify */}
+              {/* Shopify OAuth */}
               <div className="space-y-3">
                 <div className="flex items-center justify-between">
-                  <h4 className="text-sm font-medium text-gray-900">Shopify</h4>
-                  <ConnectedBadge connected={!!(brandSettings?.integrations?.shopify?.connected)} />
+                  <div>
+                    <span className="text-sm font-medium text-gray-900">Shopify</span>
+                    <span className="ml-2 text-xs text-gray-400">Product catalog &amp; publishing</span>
+                  </div>
+                  <ConnectedBadge connected={shopifyStatus?.connected ?? false} />
                 </div>
-                <div>
-                  <Label>Store URL</Label>
-                  <TextInput value={integForm.shopify_store_url} onChange={(v) => setIntegForm((f) => ({ ...f, shopify_store_url: v }))} placeholder="yourstore.myshopify.com" disabled={isReadOnly} />
-                </div>
-                <div>
-                  <Label>Blog ID</Label>
-                  <TextInput value={integForm.shopify_blog_id} onChange={(v) => setIntegForm((f) => ({ ...f, shopify_blog_id: v }))} placeholder="94553112861" disabled={isReadOnly} />
-                  <Hint>Find in Shopify Admin → Online Store → Blog Posts → URL.</Hint>
-                </div>
-                <div>
-                  <Label>Admin API access token</Label>
-                  <TextInput
-                    type="password"
-                    value={integForm.shopify_access_token}
-                    onChange={(v) => setIntegForm((f) => ({ ...f, shopify_access_token: v }))}
-                    placeholder={(brandSettings?.integrations as unknown as Record<string, Record<string, string | null>> | null)?.shopify?.access_token ? '••••••••••••••••' : 'shpat_…'}
-                    disabled={isReadOnly}
-                  />
-                  <Hint>Required for dashboard revenue metrics. Shopify Admin → Settings → Apps and sales channels → Develop apps → your app → API credentials.</Hint>
-                </div>
+
+                {shopifySuccessBanner && (
+                  <div className="flex items-center justify-between px-3 py-2 bg-green-50 border border-green-200 rounded-md text-xs text-green-700">
+                    <span>✓ Shopify connected successfully</span>
+                    <button onClick={() => setShopifySuccessBanner(false)} className="ml-3 text-green-500 hover:text-green-700">✕</button>
+                  </div>
+                )}
+                {shopifyErrorBanner && (
+                  <div className="flex items-center justify-between px-3 py-2 bg-red-50 border border-red-200 rounded-md text-xs text-red-700">
+                    <span>Shopify connection failed: {shopifyErrorBanner}</span>
+                    <button onClick={() => setShopifyErrorBanner(null)} className="ml-3 text-red-400 hover:text-red-600">✕</button>
+                  </div>
+                )}
+
+                {shopifyLoading ? (
+                  <div className="h-8 bg-gray-100 rounded animate-pulse" />
+                ) : shopifyStatus?.configured === false ? (
+                  <p className="text-xs text-gray-400">
+                    Shopify not configured — add <code className="bg-gray-100 px-1 rounded">SHOPIFY_CLIENT_ID</code> and <code className="bg-gray-100 px-1 rounded">SHOPIFY_CLIENT_SECRET</code> to your Vercel environment variables.
+                  </p>
+                ) : shopifyStatus?.connected && shopifyStatus.connection ? (
+                  <div className="flex items-center justify-between px-3 py-2 bg-gray-50 border border-gray-200 rounded-md">
+                    <div>
+                      <div className="text-sm font-medium text-gray-800">
+                        {shopifyStatus.connection.shop_name ?? shopifyStatus.connection.shop_domain}
+                      </div>
+                      <div className="text-xs text-gray-400 mt-0.5">
+                        {shopifyStatus.connection.shop_domain}
+                        {' · '}Connected {new Date(shopifyStatus.connection.connected_at).toLocaleDateString()}
+                        {shopifyStatus.connection.last_sync_at && ` · Last sync ${new Date(shopifyStatus.connection.last_sync_at).toLocaleDateString()}`}
+                        {shopifyStatus.connection.sync_status === 'error' && (
+                          <span className="ml-1 text-red-500">· Sync error</span>
+                        )}
+                      </div>
+                    </div>
+                    <div className="flex items-center gap-2">
+                      <button
+                        type="button"
+                        onClick={handleShopifySync}
+                        disabled={shopifySyncing || shopifyStatus.connection.sync_status === 'syncing'}
+                        className="px-2 py-1 text-xs rounded border border-gray-200 text-gray-600 hover:bg-gray-50 disabled:opacity-50 transition-colors"
+                      >
+                        {shopifySyncing || shopifyStatus.connection.sync_status === 'syncing' ? 'Syncing…' : 'Sync now'}
+                      </button>
+                      <button
+                        type="button"
+                        onClick={handleShopifyDisconnect}
+                        disabled={shopifyDisconnecting || isReadOnly}
+                        className="px-2 py-1 text-xs rounded border border-red-200 text-red-600 hover:bg-red-50 disabled:opacity-50 transition-colors"
+                      >
+                        {shopifyDisconnecting ? 'Disconnecting…' : 'Disconnect'}
+                      </button>
+                    </div>
+                  </div>
+                ) : (
+                  <div>
+                    <a
+                      href={activeBrand ? `/api/integrations/shopify/connect?brand_id=${activeBrand.brand_id}` : '#'}
+                      className="inline-flex items-center gap-2 px-3 py-2 text-sm rounded-md border border-gray-200 text-gray-700 hover:bg-gray-50 transition-colors"
+                    >
+                      Connect Shopify
+                    </a>
+                    <p className="mt-2 text-xs text-gray-400">
+                      Authorises access to your Shopify store for product catalog sync and publishing.
+                    </p>
+                  </div>
+                )}
               </div>
 
               <div className="border-t border-gray-100 pt-4 space-y-3">
