@@ -176,7 +176,7 @@ export type ContentSchedule = {
 }
 
 export type IntegrationsConfig = {
-  shopify: { connected: boolean; store_url: string | null; blog_id: string | null }
+  shopify: { connected: boolean }  // OAuth token lives in shopify_connections table
   dotdigital: { connected: boolean; endpoint: string | null }
   gorgias: { connected: boolean }
   triple_whale: { connected: boolean }

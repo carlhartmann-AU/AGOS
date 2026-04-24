@@ -31,33 +31,33 @@ export async function GET(request: NextRequest) {
 
   const brandId = request.nextUrl.searchParams.get('brand_id') ?? 'plasmaide'
 
+  // Read credentials from shopify_connections (OAuth token), not legacy brand_settings JSONB
   const admin = createAdminClient()
-  const { data: settings } = await admin
-    .from('brand_settings')
-    .select('integrations')
+  const { data: conn } = await admin
+    .from('shopify_connections')
+    .select('shop_domain, access_token')
     .eq('brand_id', brandId)
-    .single()
+    .neq('sync_status', 'disconnected')
+    .neq('access_token', '')
+    .order('connected_at', { ascending: false })
+    .limit(1)
+    .maybeSingle()
 
-  const integ = settings?.integrations as Record<string, Record<string, string | boolean | null>> | null
-  const storeUrl = integ?.shopify?.store_url as string | null
-  const accessToken = integ?.shopify?.access_token as string | null
-
-  if (!storeUrl || !accessToken) {
+  if (!conn) {
     return NextResponse.json({ no_token: true })
   }
 
-  // Fetch last 30 days of orders (Shopify limit 250/page — enough for most stores)
   const since30d = daysAgo(30)
-  const shopifyBase = `https://${storeUrl}/admin/api/2025-01`
+  const shopifyBase = `https://${conn.shop_domain}/admin/api/2026-04`
 
   const res = await fetch(
     `${shopifyBase}/orders.json?status=any&created_at_min=${since30d}&limit=250`,
     {
       headers: {
-        'X-Shopify-Access-Token': accessToken,
+        'X-Shopify-Access-Token': conn.access_token,
         'Content-Type': 'application/json',
       },
-      next: { revalidate: 300 }, // cache 5 min
+      next: { revalidate: 300 },
     }
   )
 
