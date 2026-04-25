@@ -31,7 +31,7 @@ export async function GET(req: NextRequest) {
 
   // Step 2: fetch variants for the returned products
   const productIds = (products ?? []).map(p => p.id)
-  let variantsByProduct: Record<string, unknown[]> = {}
+  const variantsByProduct: Record<string, unknown[]> = {}
 
   if (productIds.length > 0) {
     const { data: variants } = await supabase
