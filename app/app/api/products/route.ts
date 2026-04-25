@@ -13,30 +13,46 @@ export async function GET(req: NextRequest) {
 
   const supabase = createAdminClient()
 
-  let query = supabase
+  // Step 1: query products (no embedded select — PostgREST embedded resources
+  // return 0 rows for unfiltered queries on this schema, two-step is reliable)
+  let productsQuery = supabase
     .from('products')
-    .select('id, shopify_product_id, title, status, tags, handle, featured_image_url, vendor, product_type, last_synced_at, created_at, product_variants(id, title, sku, price, currency, inventory_quantity, position)', { count: 'exact' })
+    .select('id, shopify_product_id, title, status, tags, handle, featured_image_url, vendor, product_type, last_synced_at, created_at', { count: 'exact' })
     .eq('brand_id', brand_id)
     .order('title', { ascending: true })
     .range(offset, offset + limit - 1)
 
-  if (status && status.trim() !== '') query = query.eq('status', status.trim())
-  if (search) query = query.ilike('title', `%${search}%`)
+  if (status && status.trim() !== '') productsQuery = productsQuery.eq('status', status.trim())
+  if (search) productsQuery = productsQuery.ilike('title', `%${search}%`)
 
-  // Diagnostic: simple count without embedded select to isolate the issue
-  const { count: simpleCount, error: simpleError } = await supabase
-    .from('products')
-    .select('id', { count: 'exact', head: true })
-    .eq('brand_id', brand_id)
-
-  const { data, error, count } = await query
-
-  console.log(`[/api/products] brand_id=${brand_id} status=${status ?? 'null'} simple=${simpleCount} simpleErr=${simpleError?.message ?? 'null'} embedded=${count} embeddedErr=${error?.message ?? 'null'} rows=${data?.length ?? 'null'}`)
+  const { data: products, error, count } = await productsQuery
 
   if (error) return NextResponse.json({ error: error.message }, { status: 500 })
 
+  // Step 2: fetch variants for the returned products
+  const productIds = (products ?? []).map(p => p.id)
+  let variantsByProduct: Record<string, unknown[]> = {}
+
+  if (productIds.length > 0) {
+    const { data: variants } = await supabase
+      .from('product_variants')
+      .select('id, product_id, title, sku, price, currency, inventory_quantity, position')
+      .in('product_id', productIds)
+    for (const v of variants ?? []) {
+      const row = v as { product_id: string; [k: string]: unknown }
+      if (!variantsByProduct[row.product_id]) variantsByProduct[row.product_id] = []
+      variantsByProduct[row.product_id].push(v)
+    }
+  }
+
+  // Step 3: merge
+  const result = (products ?? []).map(p => ({
+    ...p,
+    product_variants: variantsByProduct[p.id] ?? [],
+  }))
+
   return NextResponse.json({
-    products: data ?? [],
+    products: result,
     total: count ?? 0,
     limit,
     offset,
