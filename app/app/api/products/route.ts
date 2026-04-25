@@ -25,7 +25,7 @@ export async function GET(req: NextRequest) {
 
   const { data, error, count } = await query
 
-  console.log('[/api/products]', { brand_id, status: status ?? null, error: error?.message ?? null, count, rows: data?.length ?? null })
+  console.log(`[/api/products] brand_id=${brand_id} status=${status ?? 'null'} err=${error?.message ?? 'null'} count=${count} rows=${data?.length ?? 'null'}`)
 
   if (error) return NextResponse.json({ error: error.message }, { status: 500 })
 
