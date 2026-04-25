@@ -465,6 +465,8 @@ export default function SettingsPage() {
   const [agentsData, setAgentsData] = useState<AgentsResponse | null>(null)
   const [agentsLoading, setAgentsLoading] = useState(false)
   const [agentsSaving, setAgentsSaving] = useState<Record<string, boolean>>({})
+  const [agentsSaveResult, setAgentsSaveResult] = useState<Record<string, 'saved' | 'error'>>({})
+  const agentsSaveTimers = useRef<Record<string, ReturnType<typeof setTimeout>>>({})
 
   // Integrations
   const [integForm, setIntegForm] = useState<IntegForm>({ dotdigital_endpoint: '', n8n_webhook_base: '', triple_whale_api_key: '', triple_whale_shop_domain: '' })
@@ -701,15 +703,28 @@ export default function SettingsPage() {
   async function patchAgent(agentKey: string, update: Partial<AgentConfig>) {
     if (!activeBrand) return
     setAgentsSaving(s => ({ ...s, [agentKey]: true }))
+    setAgentsSaveResult(s => { const n = { ...s }; delete n[agentKey]; return n })
     try {
-      await fetch(`/api/agent-config/${agentKey}?brand_id=${activeBrand.brand_id}`, {
+      const res = await fetch(`/api/agent-config/${agentKey}?brand_id=${activeBrand.brand_id}`, {
         method: 'PATCH',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify(update),
       })
-      setAgentsData(d => d ? { ...d, agents: d.agents.map(a => a.agent_key === agentKey ? { ...a, ...update } : a) } : d)
+      if (res.ok) {
+        setAgentsData(d => d ? { ...d, agents: d.agents.map(a => a.agent_key === agentKey ? { ...a, ...update } : a) } : d)
+        setAgentsSaveResult(s => ({ ...s, [agentKey]: 'saved' }))
+      } else {
+        setAgentsSaveResult(s => ({ ...s, [agentKey]: 'error' }))
+      }
+    } catch {
+      setAgentsSaveResult(s => ({ ...s, [agentKey]: 'error' }))
     } finally {
       setAgentsSaving(s => ({ ...s, [agentKey]: false }))
+      // Clear the result indicator after 2 seconds
+      clearTimeout(agentsSaveTimers.current[agentKey])
+      agentsSaveTimers.current[agentKey] = setTimeout(() => {
+        setAgentsSaveResult(s => { const n = { ...s }; delete n[agentKey]; return n })
+      }, 2000)
     }
   }
 
@@ -1254,6 +1269,7 @@ export default function SettingsPage() {
                 {(agentsData?.agents ?? []).map(agent => {
                   const locked = !agent.available_in_plan
                   const isSaving = agentsSaving[agent.agent_key]
+                  const saveResult = agentsSaveResult[agent.agent_key]
                   return (
                     <div key={agent.agent_key}
                       className={`bg-white rounded-lg border overflow-hidden transition-opacity ${locked ? 'border-gray-100 opacity-60' : 'border-gray-200'}`}>
@@ -1272,7 +1288,9 @@ export default function SettingsPage() {
                               <p className="text-xs text-gray-400 mt-1 leading-relaxed">{agent.description}</p>
                             )}
                           </div>
-                          <div className="flex-shrink-0 mt-0.5">
+                          <div className="flex-shrink-0 mt-0.5 flex items-center gap-2">
+                            {saveResult === 'saved' && <span className="text-xs text-green-600">Saved</span>}
+                            {saveResult === 'error' && <span className="text-xs text-red-500">Failed</span>}
                             {isSaving
                               ? <div className="w-9 h-5 bg-gray-100 rounded-full animate-pulse" />
                               : <AgentToggle checked={agent.enabled} onChange={v => patchAgent(agent.agent_key, { enabled: v })} disabled={locked} />
