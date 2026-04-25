@@ -94,6 +94,16 @@ export async function GET(req: NextRequest) {
       updated_at: now,
     }, { onConflict: 'brand_id,shop_domain' })
 
+    // Keep brand_integrations in sync so the UI shows Connected immediately
+    await supabase.from('brand_integrations').upsert({
+      brand_id,
+      integration_slug: 'shopify',
+      status: 'connected',
+      connected_at: now,
+      config: { shop_domain: shop },
+      updated_at: now,
+    }, { onConflict: 'brand_id,integration_slug' })
+
     const successRes = NextResponse.redirect(`${redirectBase}/settings?tab=integrations&shopify=connected`)
     successRes.cookies.set('shopify_oauth_state', '', { maxAge: 0, path: '/api/integrations/shopify' })
     return successRes
