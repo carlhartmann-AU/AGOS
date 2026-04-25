@@ -2,7 +2,7 @@ import { NextRequest, NextResponse } from 'next/server'
 
 export const dynamic = 'force-dynamic'
 
-const SCOPES = 'read_products,read_orders,read_customers,read_inventory,read_analytics,read_reports,write_products'
+const SCOPES = 'read_products,write_products,read_content,write_content,read_orders,read_customers,read_inventory,read_analytics,read_reports'
 
 export async function GET(req: NextRequest) {
   const { SHOPIFY_CLIENT_ID, SHOPIFY_REDIRECT_URI, SHOPIFY_SHOP_DOMAIN } = process.env

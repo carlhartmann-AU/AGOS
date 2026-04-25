@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { createClient } from '@/lib/supabase/server'
+import { createAdminClient } from '@/lib/supabase/admin'
 import { getAgentConfig } from '@/lib/llm/provider'
 
 const ANTHROPIC_API_URL = 'https://api.anthropic.com/v1/messages'
@@ -94,6 +95,7 @@ type GenerateBody = {
   target_keywords?: string[]
   content_type?: string
   additional_context?: string
+  product_id?: string
   images?: Array<{ name: string; base64: string; mediaType: string }>
 }
 
@@ -141,6 +143,7 @@ export async function POST(request: NextRequest) {
     target_keywords = [],
     content_type = 'blog',
     additional_context,
+    product_id,
     images = [],
   } = body
 
@@ -158,11 +161,46 @@ export async function POST(request: NextRequest) {
     return NextResponse.json({ error: 'ANTHROPIC_API_KEY not configured' }, { status: 500, headers: { 'Cache-Control': 'no-store' } })
   }
 
+  // Optional: fetch lean product context (≤200 tokens)
+  let productContext: string | null = null
+  if (product_id) {
+    try {
+      const admin = createAdminClient()
+      const { data: product } = await admin
+        .from('products')
+        .select('title, description_html, handle, status, product_variants(price, currency, position)')
+        .eq('id', product_id)
+        .single()
+
+      if (product) {
+        const firstVariant = (product.product_variants as Array<{ price: string; currency: string; position: number }> | null)
+          ?.sort((a, b) => a.position - b.position)[0]
+        const plainDesc = (product.description_html as string | null ?? '')
+          .replace(/<[^>]+>/g, ' ')
+          .replace(/\s+/g, ' ')
+          .trim()
+          .slice(0, 500)
+        const parts = [
+          `Title: ${product.title}`,
+          `Handle: ${product.handle}`,
+          `Status: ${product.status}`,
+          firstVariant ? `Price: ${firstVariant.price} ${firstVariant.currency}` : null,
+          plainDesc ? `Description: ${plainDesc}` : null,
+          `Link: /products/${product.handle}`,
+        ].filter(Boolean)
+        productContext = `FEATURED PRODUCT:\n${parts.join('\n')}`
+      }
+    } catch (err) {
+      console.warn('[content/generate] product fetch failed:', err)
+    }
+  }
+
   // Build system prompt
   const systemPrompt = [
     `You are the Content Studio agent for Plasmaide's Autonomous Growth Operating System (AGOS).`,
     BRAND_RULES,
     typeGuidance,
+    productContext,
     `Respond ONLY with a valid JSON object. No markdown, no code fences, no explanation before or after.`,
     additional_context ? `\nADDITIONAL INSTRUCTIONS FROM USER:\n${additional_context}` : '',
   ]
@@ -254,7 +292,7 @@ Produce structured JSON output following the schema in your system prompt.`
       content_type,
       status: 'pending',
       platform: PLATFORM_MAP[content_type] ?? null,
-      content: generated,
+      content: { ...generated, ...(product_id ? { product_id } : {}) },
       compliance_result: { status: 'pending', notes: [] },
     })
     .select('id')
