@@ -22,7 +22,7 @@ export async function GET(req: NextRequest) {
       .maybeSingle(),
   ])
 
-  if (agentsError) return NextResponse.json({ error: agentsError.message }, { status: 500 })
+  if (agentsError) return NextResponse.json({ error: agentsError.message }, { status: 500, headers: { 'Cache-Control': 'no-store' } })
 
   // Fetch plan + allowed agents
   let planInfo: { slug: string; name: string } | null = null
@@ -50,5 +50,5 @@ export async function GET(req: NextRequest) {
     available_in_plan: allowedAgentKeys.size === 0 ? true : allowedAgentKeys.has(a.agent_key),
   }))
 
-  return NextResponse.json({ agents: enriched, plan: planInfo })
+  return NextResponse.json({ agents: enriched, plan: planInfo }, { headers: { 'Cache-Control': 'no-store' } })
 }

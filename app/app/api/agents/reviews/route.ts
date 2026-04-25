@@ -23,8 +23,8 @@ export async function GET(req: NextRequest) {
   if (responseStatus) query = query.eq('response_status', responseStatus)
 
   const { data, error } = await query
-  if (error) return NextResponse.json({ error: error.message }, { status: 500 })
-  return NextResponse.json({ reviews: data ?? [], count: data?.length ?? 0 })
+  if (error) return NextResponse.json({ error: error.message }, { status: 500, headers: { 'Cache-Control': 'no-store' } })
+  return NextResponse.json({ reviews: data ?? [], count: data?.length ?? 0 }, { headers: { 'Cache-Control': 'no-store' } })
 }
 
 export async function POST(req: NextRequest) {
@@ -41,13 +41,13 @@ export async function POST(req: NextRequest) {
       }>
     }
     if (!Array.isArray(body.reviews) || !body.reviews.length) {
-      return NextResponse.json({ error: 'reviews array required' }, { status: 400 })
+      return NextResponse.json({ error: 'reviews array required' }, { status: 400, headers: { 'Cache-Control': 'no-store' } })
     }
     const supabase = createAdminClient()
     const result = await analyseReviews(supabase, body.brand_id ?? 'plasmaide', body.reviews)
-    return NextResponse.json(result)
+    return NextResponse.json(result, { headers: { 'Cache-Control': 'no-store' } })
   } catch (err) {
     console.error('[reviews POST]', err)
-    return NextResponse.json({ error: err instanceof Error ? err.message : 'Internal error' }, { status: 500 })
+    return NextResponse.json({ error: err instanceof Error ? err.message : 'Internal error' }, { status: 500, headers: { 'Cache-Control': 'no-store' } })
   }
 }

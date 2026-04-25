@@ -7,10 +7,10 @@ export const dynamic = 'force-dynamic'
 export async function GET(req: NextRequest) {
   const supabase = createClient()
   const { data: { user } } = await supabase.auth.getUser()
-  if (!user) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
+  if (!user) return NextResponse.json({ error: 'Unauthorized' }, { status: 401, headers: { 'Cache-Control': 'no-store' } })
 
   const brandId = req.nextUrl.searchParams.get('brand_id')
-  if (!brandId) return NextResponse.json({ error: 'brand_id required' }, { status: 400 })
+  if (!brandId) return NextResponse.json({ error: 'brand_id required' }, { status: 400, headers: { 'Cache-Control': 'no-store' } })
 
   const admin = createAdminClient()
 
@@ -22,7 +22,7 @@ export async function GET(req: NextRequest) {
     .single()
 
   if (caller?.role !== 'admin' || caller?.brand_id !== brandId) {
-    return NextResponse.json({ error: 'Forbidden' }, { status: 403 })
+    return NextResponse.json({ error: 'Forbidden' }, { status: 403, headers: { 'Cache-Control': 'no-store' } })
   }
 
   const { data, error } = await admin
@@ -31,6 +31,6 @@ export async function GET(req: NextRequest) {
     .eq('brand_id', brandId)
     .order('created_at')
 
-  if (error) return NextResponse.json({ error: error.message }, { status: 500 })
-  return NextResponse.json({ members: data ?? [] })
+  if (error) return NextResponse.json({ error: error.message }, { status: 500, headers: { 'Cache-Control': 'no-store' } })
+  return NextResponse.json({ members: data ?? [] }, { headers: { 'Cache-Control': 'no-store' } })
 }

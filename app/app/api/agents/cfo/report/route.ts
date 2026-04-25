@@ -15,7 +15,7 @@ export async function POST(req: NextRequest) {
   const triggered_by: string = body.triggered_by ?? 'manual'
 
   if (!brand_id) {
-    return NextResponse.json({ error: 'brand_id is required' }, { status: 400 })
+    return NextResponse.json({ error: 'brand_id is required' }, { status: 400, headers: { 'Cache-Control': 'no-store' } })
   }
 
   const today = new Date()
@@ -29,10 +29,10 @@ export async function POST(req: NextRequest) {
 
   try {
     const report = await runCFOAnalysis(supabase, brand_id, window_start, window_end, triggered_by)
-    return NextResponse.json(report)
+    return NextResponse.json(report, { headers: { 'Cache-Control': 'no-store' } })
   } catch (err) {
     console.error('[POST /api/agents/cfo/report]', err)
-    return NextResponse.json({ error: 'CFO analysis failed', detail: String(err) }, { status: 500 })
+    return NextResponse.json({ error: 'CFO analysis failed', detail: String(err) }, { status: 500, headers: { 'Cache-Control': 'no-store' } })
   }
 }
 
@@ -46,7 +46,7 @@ export async function GET(req: NextRequest) {
   const limit = parseInt(searchParams.get('limit') ?? '1', 10)
 
   if (!brand_id) {
-    return NextResponse.json({ error: 'brand_id is required' }, { status: 400 })
+    return NextResponse.json({ error: 'brand_id is required' }, { status: 400, headers: { 'Cache-Control': 'no-store' } })
   }
 
   const supabase = createAdminClient()
@@ -59,8 +59,8 @@ export async function GET(req: NextRequest) {
     .limit(limit)
 
   if (error) {
-    return NextResponse.json({ error: error.message }, { status: 500 })
+    return NextResponse.json({ error: error.message }, { status: 500, headers: { 'Cache-Control': 'no-store' } })
   }
 
-  return NextResponse.json(limit === 1 ? (data?.[0] ?? null) : data)
+  return NextResponse.json(limit === 1 ? (data?.[0] ?? null) : data, { headers: { 'Cache-Control': 'no-store' } })
 }

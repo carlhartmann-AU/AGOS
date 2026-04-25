@@ -23,8 +23,8 @@ export async function GET(req: NextRequest) {
   if (priority) query = query.eq('priority', priority)
 
   const { data, error } = await query
-  if (error) return NextResponse.json({ error: error.message }, { status: 500 })
-  return NextResponse.json({ tickets: data ?? [], count: data?.length ?? 0 })
+  if (error) return NextResponse.json({ error: error.message }, { status: 500, headers: { 'Cache-Control': 'no-store' } })
+  return NextResponse.json({ tickets: data ?? [], count: data?.length ?? 0 }, { headers: { 'Cache-Control': 'no-store' } })
 }
 
 export async function POST(req: NextRequest) {
@@ -38,7 +38,7 @@ export async function POST(req: NextRequest) {
       channel?: string
     }
     if (!body.subject || !body.message) {
-      return NextResponse.json({ error: 'subject and message required' }, { status: 400 })
+      return NextResponse.json({ error: 'subject and message required' }, { status: 400, headers: { 'Cache-Control': 'no-store' } })
     }
     const supabase = createAdminClient()
     const result = await handleCustomerInquiry(supabase, body.brand_id ?? 'plasmaide', {
@@ -48,10 +48,10 @@ export async function POST(req: NextRequest) {
       message: body.message,
       channel: body.channel,
     })
-    return NextResponse.json(result)
+    return NextResponse.json(result, { headers: { 'Cache-Control': 'no-store' } })
   } catch (err) {
     console.error('[cs/tickets POST]', err)
-    return NextResponse.json({ error: err instanceof Error ? err.message : 'Internal error' }, { status: 500 })
+    return NextResponse.json({ error: err instanceof Error ? err.message : 'Internal error' }, { status: 500, headers: { 'Cache-Control': 'no-store' } })
   }
 }
 
@@ -63,7 +63,7 @@ export async function PATCH(req: NextRequest) {
       resolution_notes?: string
       escalated_to?: string
     }
-    if (!body.ticket_id) return NextResponse.json({ error: 'ticket_id required' }, { status: 400 })
+    if (!body.ticket_id) return NextResponse.json({ error: 'ticket_id required' }, { status: 400, headers: { 'Cache-Control': 'no-store' } })
 
     const supabase = createAdminClient()
     const update: Record<string, unknown> = { updated_at: new Date().toISOString() }
@@ -79,9 +79,9 @@ export async function PATCH(req: NextRequest) {
       .select()
       .single()
 
-    if (error) return NextResponse.json({ error: error.message }, { status: 500 })
-    return NextResponse.json({ ok: true, ticket: data })
+    if (error) return NextResponse.json({ error: error.message }, { status: 500, headers: { 'Cache-Control': 'no-store' } })
+    return NextResponse.json({ ok: true, ticket: data }, { headers: { 'Cache-Control': 'no-store' } })
   } catch (err) {
-    return NextResponse.json({ error: err instanceof Error ? err.message : 'Internal error' }, { status: 500 })
+    return NextResponse.json({ error: err instanceof Error ? err.message : 'Internal error' }, { status: 500, headers: { 'Cache-Control': 'no-store' } })
   }
 }

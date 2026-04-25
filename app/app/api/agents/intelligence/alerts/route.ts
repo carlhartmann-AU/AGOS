@@ -25,12 +25,11 @@ export async function GET(req: NextRequest) {
     const { data, error } = await query
     if (error) throw error
 
-    return NextResponse.json({ ok: true, alerts: data ?? [] })
+    return NextResponse.json({ ok: true, alerts: data ?? [] }, { headers: { 'Cache-Control': 'no-store' } })
   } catch (err) {
     return NextResponse.json(
       { ok: false, error: err instanceof Error ? err.message : 'Unknown error' },
-      { status: 500 }
-    )
+      { status: 500, headers: { 'Cache-Control': 'no-store' } })
   }
 }
 
@@ -38,7 +37,7 @@ export async function POST(req: NextRequest) {
   try {
     const body = await req.json() as { alert_id?: string; acknowledged_by?: string }
     if (!body.alert_id) {
-      return NextResponse.json({ ok: false, error: 'alert_id required' }, { status: 400 })
+      return NextResponse.json({ ok: false, error: 'alert_id required' }, { status: 400, headers: { 'Cache-Control': 'no-store' } })
     }
 
     const supabase = createAdminClient()
@@ -53,11 +52,10 @@ export async function POST(req: NextRequest) {
 
     if (error) throw error
 
-    return NextResponse.json({ ok: true })
+    return NextResponse.json({ ok: true }, { headers: { 'Cache-Control': 'no-store' } })
   } catch (err) {
     return NextResponse.json(
       { ok: false, error: err instanceof Error ? err.message : 'Unknown error' },
-      { status: 500 }
-    )
+      { status: 500, headers: { 'Cache-Control': 'no-store' } })
   }
 }

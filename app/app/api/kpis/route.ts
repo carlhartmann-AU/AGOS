@@ -30,19 +30,17 @@ export async function GET(req: NextRequest) {
     if (!VALID_WINDOWS.includes(window)) {
       return NextResponse.json(
         { error: `Invalid window. Must be one of: ${VALID_WINDOWS.join(', ')}` },
-        { status: 400 }
-      )
+        { status: 400, headers: { 'Cache-Control': 'no-store' } })
     }
 
     if (!brandId) {
-      return NextResponse.json({ error: 'brand_id required' }, { status: 400 })
+      return NextResponse.json({ error: 'brand_id required' }, { status: 400, headers: { 'Cache-Control': 'no-store' } })
     }
 
     if (requestedCurrency && !SUPPORTED_CURRENCIES.includes(requestedCurrency)) {
       return NextResponse.json(
         { error: `Unsupported currency. Supported: ${SUPPORTED_CURRENCIES.join(', ')}` },
-        { status: 400 }
-      )
+        { status: 400, headers: { 'Cache-Control': 'no-store' } })
     }
 
     const supabase = admin()
@@ -59,12 +57,11 @@ export async function GET(req: NextRequest) {
     }
 
     const kpis = await getKPIs(supabase, brandId, window, displayCurrency ?? 'USD')
-    return NextResponse.json(kpis)
+    return NextResponse.json(kpis, { headers: { 'Cache-Control': 'no-store' } })
   } catch (err) {
     console.error('KPI read error:', err)
     return NextResponse.json(
       { error: err instanceof Error ? err.message : 'Unknown error' },
-      { status: 500 }
-    )
+      { status: 500, headers: { 'Cache-Control': 'no-store' } })
   }
 }

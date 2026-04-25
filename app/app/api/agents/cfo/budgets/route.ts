@@ -10,7 +10,7 @@ export async function GET(req: NextRequest) {
   const fiscal_year = searchParams.get('fiscal_year')
 
   if (!brand_id) {
-    return NextResponse.json({ error: 'brand_id is required' }, { status: 400 })
+    return NextResponse.json({ error: 'brand_id is required' }, { status: 400, headers: { 'Cache-Control': 'no-store' } })
   }
 
   const supabase = createAdminClient()
@@ -24,9 +24,9 @@ export async function GET(req: NextRequest) {
   if (fiscal_year) query = query.eq('fiscal_year', fiscal_year)
 
   const { data, error } = await query
-  if (error) return NextResponse.json({ error: error.message }, { status: 500 })
+  if (error) return NextResponse.json({ error: error.message }, { status: 500, headers: { 'Cache-Control': 'no-store' } })
 
-  return NextResponse.json(data)
+  return NextResponse.json(data, { headers: { 'Cache-Control': 'no-store' } })
 }
 
 /**
@@ -39,7 +39,7 @@ export async function POST(req: NextRequest) {
   const { brand_id, fiscal_year, metric, target } = body
 
   if (!brand_id || !fiscal_year || !metric || target == null) {
-    return NextResponse.json({ error: 'brand_id, fiscal_year, metric, target are required' }, { status: 400 })
+    return NextResponse.json({ error: 'brand_id, fiscal_year, metric, target are required' }, { status: 400, headers: { 'Cache-Control': 'no-store' } })
   }
 
   const supabase = createAdminClient()
@@ -52,8 +52,8 @@ export async function POST(req: NextRequest) {
     .select()
     .single()
 
-  if (error) return NextResponse.json({ error: error.message }, { status: 500 })
-  return NextResponse.json(data)
+  if (error) return NextResponse.json({ error: error.message }, { status: 500, headers: { 'Cache-Control': 'no-store' } })
+  return NextResponse.json(data, { headers: { 'Cache-Control': 'no-store' } })
 }
 
 /**
@@ -66,7 +66,7 @@ export async function PATCH(req: NextRequest) {
   const { brand_id, fiscal_year, updates } = body
 
   if (!brand_id || !fiscal_year || !updates || typeof updates !== 'object') {
-    return NextResponse.json({ error: 'brand_id, fiscal_year, updates (object) are required' }, { status: 400 })
+    return NextResponse.json({ error: 'brand_id, fiscal_year, updates (object) are required' }, { status: 400, headers: { 'Cache-Control': 'no-store' } })
   }
 
   const supabase = createAdminClient()
@@ -85,6 +85,6 @@ export async function PATCH(req: NextRequest) {
     .upsert(rows, { onConflict: 'brand_id,fiscal_year,metric' })
     .select()
 
-  if (error) return NextResponse.json({ error: error.message }, { status: 500 })
-  return NextResponse.json(data)
+  if (error) return NextResponse.json({ error: error.message }, { status: 500, headers: { 'Cache-Control': 'no-store' } })
+  return NextResponse.json(data, { headers: { 'Cache-Control': 'no-store' } })
 }

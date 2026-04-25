@@ -20,7 +20,7 @@ type QueueRow = {
 export async function GET(request: NextRequest) {
   const supabase = createClient()
   const { data: { user } } = await supabase.auth.getUser()
-  if (!user) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
+  if (!user) return NextResponse.json({ error: 'Unauthorized' }, { status: 401, headers: { 'Cache-Control': 'no-store' } })
 
   const brandId = request.nextUrl.searchParams.get('brand_id') ?? 'plasmaide'
   const admin = createAdminClient()
@@ -76,5 +76,5 @@ export async function GET(request: NextRequest) {
   return NextResponse.json({
     content: contentMetrics,
     recent: recentItems,
-  })
+  }, { headers: { 'Cache-Control': 'no-store' } })
 }

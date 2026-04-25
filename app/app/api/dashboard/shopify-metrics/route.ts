@@ -27,7 +27,7 @@ function daysAgo(n: number) {
 export async function GET(request: NextRequest) {
   const supabase = createClient()
   const { data: { user } } = await supabase.auth.getUser()
-  if (!user) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
+  if (!user) return NextResponse.json({ error: 'Unauthorized' }, { status: 401, headers: { 'Cache-Control': 'no-store' } })
 
   const brandId = request.nextUrl.searchParams.get('brand_id') ?? 'plasmaide'
 
@@ -44,7 +44,7 @@ export async function GET(request: NextRequest) {
     .maybeSingle()
 
   if (!conn) {
-    return NextResponse.json({ no_token: true })
+    return NextResponse.json({ no_token: true }, { headers: { 'Cache-Control': 'no-store' } })
   }
 
   const since30d = daysAgo(30)
@@ -63,7 +63,7 @@ export async function GET(request: NextRequest) {
 
   if (!res.ok) {
     const errText = await res.text()
-    return NextResponse.json({ error: `Shopify API error: ${res.status}`, detail: errText }, { status: 502 })
+    return NextResponse.json({ error: `Shopify API error: ${res.status}`, detail: errText }, { status: 502, headers: { 'Cache-Control': 'no-store' } })
   }
 
   const data: ShopifyOrdersResponse = await res.json()
@@ -82,5 +82,5 @@ export async function GET(request: NextRequest) {
     orders_today: ordersToday,
     aov,
     revenue_30d: revenue30d,
-  })
+  }, { headers: { 'Cache-Control': 'no-store' } })
 }

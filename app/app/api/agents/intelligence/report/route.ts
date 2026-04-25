@@ -27,13 +27,12 @@ export async function POST(req: NextRequest) {
     const supabase = createAdminClient()
     const report = await runIntelligence(supabase, brandId, windowStart, windowEnd, 'manual')
 
-    return NextResponse.json({ ok: true, report })
+    return NextResponse.json({ ok: true, report }, { headers: { 'Cache-Control': 'no-store' } })
   } catch (err) {
     console.error('[intelligence/report] POST error:', err)
     return NextResponse.json(
       { ok: false, error: err instanceof Error ? err.message : 'Unknown error' },
-      { status: 500 }
-    )
+      { status: 500, headers: { 'Cache-Control': 'no-store' } })
   }
 }
 
@@ -52,12 +51,11 @@ export async function GET(req: NextRequest) {
 
     if (error) throw error
 
-    return NextResponse.json({ ok: true, report: data ?? null })
+    return NextResponse.json({ ok: true, report: data ?? null }, { headers: { 'Cache-Control': 'no-store' } })
   } catch (err) {
     console.error('[intelligence/report] GET error:', err)
     return NextResponse.json(
       { ok: false, error: err instanceof Error ? err.message : 'Unknown error' },
-      { status: 500 }
-    )
+      { status: 500, headers: { 'Cache-Control': 'no-store' } })
   }
 }

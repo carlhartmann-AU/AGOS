@@ -16,8 +16,8 @@ export async function GET(req: NextRequest) {
     .order('last_message_at', { ascending: false })
     .limit(limit)
 
-  if (error) return NextResponse.json({ error: error.message }, { status: 500 })
-  return NextResponse.json({ conversations: data ?? [] })
+  if (error) return NextResponse.json({ error: error.message }, { status: 500, headers: { 'Cache-Control': 'no-store' } })
+  return NextResponse.json({ conversations: data ?? [] }, { headers: { 'Cache-Control': 'no-store' } })
 }
 
 export async function POST(req: NextRequest) {
@@ -31,17 +31,17 @@ export async function POST(req: NextRequest) {
     .select('id, brand_id, channel, title, created_at, last_message_at')
     .single()
 
-  if (error) return NextResponse.json({ error: error.message }, { status: 500 })
-  return NextResponse.json({ conversation: data })
+  if (error) return NextResponse.json({ error: error.message }, { status: 500, headers: { 'Cache-Control': 'no-store' } })
+  return NextResponse.json({ conversation: data }, { headers: { 'Cache-Control': 'no-store' } })
 }
 
 export async function DELETE(req: NextRequest) {
   const body = await req.json().catch(() => ({}))
   const { conversation_id } = body
-  if (!conversation_id) return NextResponse.json({ error: 'conversation_id required' }, { status: 400 })
+  if (!conversation_id) return NextResponse.json({ error: 'conversation_id required' }, { status: 400, headers: { 'Cache-Control': 'no-store' } })
 
   const supabase = createAdminClient()
   const { error } = await supabase.from('coo_conversations').delete().eq('id', conversation_id)
-  if (error) return NextResponse.json({ error: error.message }, { status: 500 })
-  return NextResponse.json({ ok: true })
+  if (error) return NextResponse.json({ error: error.message }, { status: 500, headers: { 'Cache-Control': 'no-store' } })
+  return NextResponse.json({ ok: true }, { headers: { 'Cache-Control': 'no-store' } })
 }

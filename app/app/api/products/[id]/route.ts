@@ -16,9 +16,9 @@ export async function GET(
     .single()
 
   if (error) {
-    if (error.code === 'PGRST116') return NextResponse.json({ error: 'Not found' }, { status: 404 })
-    return NextResponse.json({ error: error.message }, { status: 500 })
+    if (error.code === 'PGRST116') return NextResponse.json({ error: 'Not found' }, { status: 404, headers: { 'Cache-Control': 'no-store' } })
+    return NextResponse.json({ error: error.message }, { status: 500, headers: { 'Cache-Control': 'no-store' } })
   }
 
-  return NextResponse.json({ product })
+  return NextResponse.json({ product }, { headers: { 'Cache-Control': 'no-store' } })
 }

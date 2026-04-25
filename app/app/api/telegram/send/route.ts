@@ -8,20 +8,20 @@ export async function POST(req: NextRequest) {
   // Auth: CRON_SECRET bearer only
   const authHeader = req.headers.get('authorization')
   if (authHeader !== `Bearer ${process.env.CRON_SECRET}`) {
-    return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
+    return NextResponse.json({ error: 'Unauthorized' }, { status: 401, headers: { 'Cache-Control': 'no-store' } })
   }
 
   const body = await req.json().catch(() => ({}))
   const { brand_id = 'plasmaide', message, severity, chat_id } = body
 
-  if (!message) return NextResponse.json({ error: 'message is required' }, { status: 400 })
+  if (!message) return NextResponse.json({ error: 'message is required' }, { status: 400, headers: { 'Cache-Control': 'no-store' } })
 
   const supabase = createAdminClient()
 
   if (chat_id) {
     // Send to specific chat
     const ok = await sendTelegramMessage(chat_id, message)
-    return NextResponse.json({ ok })
+    return NextResponse.json({ ok }, { headers: { 'Cache-Control': 'no-store' } })
   }
 
   if (severity) {
@@ -31,7 +31,7 @@ export async function POST(req: NextRequest) {
       title: 'AGOS Alert',
       description: message,
     })
-    return NextResponse.json({ ok: true })
+    return NextResponse.json({ ok: true }, { headers: { 'Cache-Control': 'no-store' } })
   }
 
   // Broadcast plain message to all subscribers
@@ -41,14 +41,14 @@ export async function POST(req: NextRequest) {
     .eq('brand_id', brand_id)
     .eq('alerts_enabled', true)
 
-  if (!subscribers?.length) return NextResponse.json({ ok: true, sent: 0 })
+  if (!subscribers?.length) return NextResponse.json({ ok: true, sent: 0 }, { headers: { 'Cache-Control': 'no-store' } })
 
   const results = await Promise.allSettled(
     subscribers.map(s => sendTelegramMessage(s.telegram_chat_id, message)),
   )
   const sent = results.filter(r => r.status === 'fulfilled' && r.value).length
 
-  return NextResponse.json({ ok: true, sent })
+  return NextResponse.json({ ok: true, sent }, { headers: { 'Cache-Control': 'no-store' } })
 }
 
 export async function GET(req: NextRequest) {
@@ -63,5 +63,5 @@ export async function GET(req: NextRequest) {
     .eq('brand_id', brandId)
     .order('created_at', { ascending: true })
 
-  return NextResponse.json({ configured, subscribers: subscribers ?? [] })
+  return NextResponse.json({ configured, subscribers: subscribers ?? [] }, { headers: { 'Cache-Control': 'no-store' } })
 }

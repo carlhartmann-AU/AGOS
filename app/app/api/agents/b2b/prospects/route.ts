@@ -22,8 +22,8 @@ export async function GET(req: NextRequest) {
   if (country) query = query.eq('country', country)
 
   const { data, error } = await query
-  if (error) return NextResponse.json({ error: error.message }, { status: 500 })
-  return NextResponse.json({ prospects: data ?? [], count: data?.length ?? 0 })
+  if (error) return NextResponse.json({ error: error.message }, { status: 500, headers: { 'Cache-Control': 'no-store' } })
+  return NextResponse.json({ prospects: data ?? [], count: data?.length ?? 0 }, { headers: { 'Cache-Control': 'no-store' } })
 }
 
 export async function PATCH(req: NextRequest) {
@@ -35,7 +35,7 @@ export async function PATCH(req: NextRequest) {
       score?: number
       decision_maker_email?: string
     }
-    if (!body.prospect_id) return NextResponse.json({ error: 'prospect_id required' }, { status: 400 })
+    if (!body.prospect_id) return NextResponse.json({ error: 'prospect_id required' }, { status: 400, headers: { 'Cache-Control': 'no-store' } })
 
     const supabase = createAdminClient()
     const update: Record<string, unknown> = { updated_at: new Date().toISOString() }
@@ -51,9 +51,9 @@ export async function PATCH(req: NextRequest) {
       .select()
       .single()
 
-    if (error) return NextResponse.json({ error: error.message }, { status: 500 })
-    return NextResponse.json({ ok: true, prospect: data })
+    if (error) return NextResponse.json({ error: error.message }, { status: 500, headers: { 'Cache-Control': 'no-store' } })
+    return NextResponse.json({ ok: true, prospect: data }, { headers: { 'Cache-Control': 'no-store' } })
   } catch (err) {
-    return NextResponse.json({ error: err instanceof Error ? err.message : 'Internal error' }, { status: 500 })
+    return NextResponse.json({ error: err instanceof Error ? err.message : 'Internal error' }, { status: 500, headers: { 'Cache-Control': 'no-store' } })
   }
 }
