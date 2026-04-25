@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { createAdminClient } from '@/lib/supabase/admin'
 import { runCFOAnalysis } from '@/lib/agents/cfo/engine'
+import { getAgentConfig } from '@/lib/llm/provider'
 
 export const maxDuration = 60
 
@@ -27,8 +28,16 @@ export async function POST(req: NextRequest) {
 
   const supabase = createAdminClient()
 
+  const agentCfg = await getAgentConfig(brand_id, 'cfo')
+  if (!agentCfg.enabled) {
+    return NextResponse.json(
+      { disabled: true, message: `Agent cfo disabled for brand ${brand_id}` },
+      { status: 200, headers: { 'Cache-Control': 'no-store' } },
+    )
+  }
+
   try {
-    const report = await runCFOAnalysis(supabase, brand_id, window_start, window_end, triggered_by)
+    const report = await runCFOAnalysis(supabase, brand_id, window_start, window_end, triggered_by, agentCfg.model)
     return NextResponse.json(report, { headers: { 'Cache-Control': 'no-store' } })
   } catch (err) {
     console.error('[POST /api/agents/cfo/report]', err)

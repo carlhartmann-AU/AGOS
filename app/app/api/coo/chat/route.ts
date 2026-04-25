@@ -1,6 +1,7 @@
 import { NextRequest } from 'next/server'
 import { createAdminClient } from '@/lib/supabase/admin'
 import { runCOOChat } from '@/lib/agents/coo/engine'
+import { getAgentConfig } from '@/lib/llm/provider'
 import type { COOStreamChunk } from '@/lib/agents/coo/types'
 
 export const dynamic = 'force-dynamic'
@@ -19,6 +20,14 @@ export async function POST(req: NextRequest) {
 
     if (!message) {
       return new Response(JSON.stringify({ error: 'message is required' }), { status: 400 })
+    }
+
+    const agentCfg = await getAgentConfig(brandId, 'coo')
+    if (!agentCfg.enabled) {
+      return new Response(
+        JSON.stringify({ disabled: true, message: `Agent coo disabled for brand ${brandId}` }),
+        { status: 200, headers: { 'Content-Type': 'application/json', 'Cache-Control': 'no-store' } },
+      )
     }
 
     const supabase = createAdminClient()
@@ -55,7 +64,7 @@ export async function POST(req: NextRequest) {
         // Send conversation_id as first metadata chunk
         writer.write(encoder.encode(JSON.stringify({ type: 'meta', conversation_id: conversationId }) + '\n'))
 
-        await runCOOChat(supabase, brandId, conversationId!, message, writeChunk)
+        await runCOOChat(supabase, brandId, conversationId!, message, writeChunk, agentCfg.model)
       } catch (err) {
         writeChunk({
           type: 'error',

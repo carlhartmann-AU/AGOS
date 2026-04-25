@@ -352,6 +352,7 @@ async function runNarrator(
   bva: BudgetVsActual,
   cash: CashForecast,
   alerts: MarginAlert[],
+  modelOverride?: string,
 ): Promise<{
   narrative: string
   recommendations: CFORecommendation[]
@@ -359,7 +360,7 @@ async function runNarrator(
   cost_usd: number
   model_used: string
 }> {
-  const model = 'claude-sonnet-4-6'
+  const model = modelOverride ?? 'claude-sonnet-4-6'
   const anthropic = new Anthropic({ apiKey: process.env.ANTHROPIC_API_KEY! })
 
   const prompt = `You are CFO Analyst for a DTC supplement brand. Analyse the financial metrics below and produce a concise executive summary.
@@ -428,6 +429,7 @@ export async function runCFOAnalysis(
   windowStart: string,
   windowEnd: string,
   triggeredBy: string,
+  model?: string,
 ): Promise<CFOReport> {
   // 1. Load fy_config
   const { data: bsRow } = await supabase
@@ -467,7 +469,7 @@ export async function runCFOAnalysis(
 
   if (process.env.ANTHROPIC_API_KEY && plRows.length > 0) {
     try {
-      const narResult = await runNarrator(unitEconomics, budgetVsActual, cashForecast, marginAlerts)
+      const narResult = await runNarrator(unitEconomics, budgetVsActual, cashForecast, marginAlerts, model)
       narrative = narResult.narrative
       recommendations = narResult.recommendations
       tokensUsed = narResult.tokens.input + narResult.tokens.output

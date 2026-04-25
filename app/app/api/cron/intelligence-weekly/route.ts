@@ -15,20 +15,18 @@ export async function GET(req: NextRequest) {
 
   const supabase = createAdminClient()
 
-  // Find all brands with compliance enabled (used as proxy for AGOS-enabled brands)
-  const { data: allSettings, error } = await supabase
-    .from('brand_settings')
-    .select('brand_id, compliance')
+  // Find all brands with intelligence agent enabled in agent_config
+  const { data: enabledAgents, error } = await supabase
+    .from('agent_config')
+    .select('brand_id, llm_model')
+    .eq('agent_key', 'intelligence')
+    .eq('enabled', true)
 
   if (error) {
     return NextResponse.json({ error: error.message }, { status: 500 })
   }
 
-  type Row = { brand_id: string; compliance: Record<string, unknown> | null }
-  const brands = ((allSettings ?? []) as Row[]).filter(row => {
-    const c = row.compliance as Record<string, unknown> | null
-    return c?.enabled === true
-  })
+  const brands = enabledAgents ?? []
 
   const end = new Date()
   const start = new Date()
@@ -37,7 +35,7 @@ export async function GET(req: NextRequest) {
   const windowEnd = end.toISOString().slice(0, 10)
 
   const results = await Promise.allSettled(
-    brands.map(row => runIntelligence(supabase, row.brand_id, windowStart, windowEnd, 'cron'))
+    brands.map(row => runIntelligence(supabase, row.brand_id, windowStart, windowEnd, 'cron', row.llm_model ?? undefined))
   )
 
   const summary = results.map((r, i) => ({

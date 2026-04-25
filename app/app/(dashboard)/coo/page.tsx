@@ -210,10 +210,22 @@ export default function COOPage() {
   const [voiceModal, setVoiceModal] = useState(false)
   const [convLoading, setConvLoading] = useState(true)
   const [msgLoading, setMsgLoading] = useState(false)
+  const [cooEnabled, setCooEnabled] = useState<boolean | null>(null)
 
   const messagesEndRef = useRef<HTMLDivElement>(null)
   const inputRef = useRef<HTMLTextAreaElement>(null)
   const skipNextMsgFetch = useRef(false)
+
+  useEffect(() => {
+    setCooEnabled(null)
+    fetch(`/api/agent-config?brand_id=${brandId}`)
+      .then(r => r.json())
+      .then(data => {
+        const coo = (data.agents ?? []).find((a: { agent_key: string; enabled: boolean }) => a.agent_key === 'coo')
+        setCooEnabled(coo ? coo.enabled : true)
+      })
+      .catch(() => setCooEnabled(true))
+  }, [brandId])
 
   const loadConversations = useCallback(async () => {
     try {
@@ -440,9 +452,16 @@ export default function COOPage() {
           {/* Main chat */}
           <div style={{ flex: 1, display: 'flex', flexDirection: 'column', minWidth: 0, background: 'var(--bg)' }}>
 
+            {/* Disabled banner */}
+            {cooEnabled === false && (
+              <div style={{ padding: '10px 20px', background: '#fbe2e2', borderBottom: '1px solid #f0b0b0', fontSize: 13, color: '#c02525', textAlign: 'center', flexShrink: 0 }}>
+                COO Agent is currently disabled for this brand.
+              </div>
+            )}
+
             {/* Top bar */}
             <div style={{ padding: '10px 20px', background: 'var(--panel)', borderBottom: '1px solid var(--line)', display: 'flex', alignItems: 'center', gap: 12, flexShrink: 0 }}>
-              <span style={{ width: 7, height: 7, borderRadius: '50%', background: '#0f8a5f', boxShadow: '0 0 0 2px rgba(15,138,95,.2)', flexShrink: 0 }} />
+              <span style={{ width: 7, height: 7, borderRadius: '50%', background: cooEnabled === false ? '#c02525' : '#0f8a5f', boxShadow: `0 0 0 2px ${cooEnabled === false ? 'rgba(192,37,37,.2)' : 'rgba(15,138,95,.2)'}`, flexShrink: 0 }} />
               <span style={{ fontSize: 13, fontWeight: 500, color: 'var(--ink-2)', flex: 1 }}>COO Agent</span>
               <span style={{ fontSize: 11, color: 'var(--ink-4)', fontFamily: 'monospace' }}>claude-sonnet-4-6</span>
               <button
@@ -517,15 +536,15 @@ export default function COOPage() {
                   value={input}
                   onChange={e => setInput(e.target.value)}
                   onKeyDown={handleKeyDown}
-                  disabled={streaming}
-                  placeholder="Ask your COO anything… (Enter to send, Shift+Enter for new line)"
+                  disabled={streaming || cooEnabled === false}
+                  placeholder={cooEnabled === false ? 'COO Agent is disabled' : 'Ask your COO anything… (Enter to send, Shift+Enter for new line)'}
                   rows={1}
-                  style={{ flex: 1, padding: '9px 12px', borderRadius: 7, border: '1px solid var(--line-3)', background: streaming ? 'var(--panel-2)' : '#fff', fontSize: 13, lineHeight: 1.5, resize: 'none', outline: 'none', fontFamily: 'inherit', color: 'var(--ink)', maxHeight: 160, overflowY: 'auto' }}
+                  style={{ flex: 1, padding: '9px 12px', borderRadius: 7, border: '1px solid var(--line-3)', background: streaming || cooEnabled === false ? 'var(--panel-2)' : '#fff', fontSize: 13, lineHeight: 1.5, resize: 'none', outline: 'none', fontFamily: 'inherit', color: 'var(--ink)', maxHeight: 160, overflowY: 'auto' }}
                 />
                 <button
                   onClick={() => sendMessage(input)}
-                  disabled={streaming || !input.trim()}
-                  style={{ padding: '9px 16px', borderRadius: 7, border: 'none', background: streaming || !input.trim() ? 'var(--line)' : 'var(--accent)', color: streaming || !input.trim() ? 'var(--ink-4)' : '#fff', fontSize: 13, fontWeight: 500, cursor: streaming || !input.trim() ? 'not-allowed' : 'pointer', whiteSpace: 'nowrap', height: 40 }}
+                  disabled={streaming || !input.trim() || cooEnabled === false}
+                  style={{ padding: '9px 16px', borderRadius: 7, border: 'none', background: streaming || !input.trim() || cooEnabled === false ? 'var(--line)' : 'var(--accent)', color: streaming || !input.trim() || cooEnabled === false ? 'var(--ink-4)' : '#fff', fontSize: 13, fontWeight: 500, cursor: streaming || !input.trim() || cooEnabled === false ? 'not-allowed' : 'pointer', whiteSpace: 'nowrap', height: 40 }}
                 >
                   {streaming ? 'Thinking…' : 'Send'}
                 </button>

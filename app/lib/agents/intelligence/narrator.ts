@@ -38,9 +38,10 @@ export async function runNarrator(
   content: ContentSummary,
   compliance: ComplianceSummary,
   anomalies: Anomaly[],
-  modelConfig?: { fast?: string; accurate?: string; premium?: string }
+  modelConfig?: { fast?: string; accurate?: string; premium?: string },
+  modelOverride?: string,
 ): Promise<NarratorResult> {
-  const model = modelConfig?.accurate ?? 'claude-sonnet-4-6'
+  const model = modelOverride ?? modelConfig?.accurate ?? 'claude-sonnet-4-6'
 
   const anthropic = new Anthropic({ apiKey: process.env.ANTHROPIC_API_KEY! })
 

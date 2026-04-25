@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { createAdminClient } from '@/lib/supabase/admin'
 import { sendTelegramMessage } from '@/lib/agents/coo/telegram'
+import { getAgentConfig } from '@/lib/llm/provider'
 
 export const dynamic = 'force-dynamic'
 
@@ -25,6 +26,12 @@ export async function GET(req: NextRequest) {
 
   const supabase = createAdminClient()
   const brandId = 'plasmaide'
+
+  const agentCfg = await getAgentConfig(brandId, 'coo')
+  if (!agentCfg.enabled) {
+    console.log(`Agent coo disabled for brand ${brandId}, skipping cron.`)
+    return NextResponse.json({ ok: true, skipped: true, reason: `Agent coo disabled for brand ${brandId}` })
+  }
 
   const today = new Date()
   const yesterday = new Date(today)

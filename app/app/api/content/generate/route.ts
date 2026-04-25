@@ -1,8 +1,9 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { createClient } from '@/lib/supabase/server'
+import { getAgentConfig } from '@/lib/llm/provider'
 
 const ANTHROPIC_API_URL = 'https://api.anthropic.com/v1/messages'
-const MODEL = 'claude-sonnet-4-6'
+const DEFAULT_MODEL = 'claude-sonnet-4-6'
 const SHOPIFY_BLOG_ID = '94553112861'
 
 // ─── Brand + compliance rules (shared across all types) ───────────────────────
@@ -117,7 +118,15 @@ export async function POST(request: NextRequest) {
   } = await supabase.auth.getUser()
 
   if (!user) {
-    return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
+    return NextResponse.json({ error: 'Unauthorized' }, { status: 401, headers: { 'Cache-Control': 'no-store' } })
+  }
+
+  const agentCfg = await getAgentConfig('plasmaide', 'content')
+  if (!agentCfg.enabled) {
+    return NextResponse.json(
+      { disabled: true, message: 'Content agent disabled for this brand' },
+      { status: 200, headers: { 'Cache-Control': 'no-store' } },
+    )
   }
 
   let body: GenerateBody
@@ -136,17 +145,17 @@ export async function POST(request: NextRequest) {
   } = body
 
   if (!topic) {
-    return NextResponse.json({ error: 'Missing required field: topic' }, { status: 400 })
+    return NextResponse.json({ error: 'Missing required field: topic' }, { status: 400, headers: { 'Cache-Control': 'no-store' } })
   }
 
   const typeGuidance = TYPE_GUIDANCE[content_type]
   if (!typeGuidance) {
-    return NextResponse.json({ error: `Unsupported content_type: ${content_type}` }, { status: 400 })
+    return NextResponse.json({ error: `Unsupported content_type: ${content_type}` }, { status: 400, headers: { 'Cache-Control': 'no-store' } })
   }
 
   const apiKey = process.env.ANTHROPIC_API_KEY
   if (!apiKey) {
-    return NextResponse.json({ error: 'ANTHROPIC_API_KEY not configured' }, { status: 500 })
+    return NextResponse.json({ error: 'ANTHROPIC_API_KEY not configured' }, { status: 500, headers: { 'Cache-Control': 'no-store' } })
   }
 
   // Build system prompt
@@ -200,7 +209,7 @@ Produce structured JSON output following the schema in your system prompt.`
       'anthropic-version': '2023-06-01',
     },
     body: JSON.stringify({
-      model: MODEL,
+      model: agentCfg.model ?? DEFAULT_MODEL,
       max_tokens: 4096,
       system: systemPrompt,
       messages: [{ role: 'user', content: messageContent }],
@@ -211,7 +220,7 @@ Produce structured JSON output following the schema in your system prompt.`
     const errBody = await claudeRes.json().catch(() => ({}))
     return NextResponse.json(
       { error: `Claude API error: ${claudeRes.status}`, detail: errBody },
-      { status: 502 }
+      { status: 502, headers: { 'Cache-Control': 'no-store' } },
     )
   }
 
@@ -229,7 +238,7 @@ Produce structured JSON output following the schema in your system prompt.`
     console.error('[content/generate] JSON parse failed. Raw text:', rawText)
     return NextResponse.json(
       { error: 'Claude returned invalid JSON', raw: rawText.slice(0, 500) },
-      { status: 502 }
+      { status: 502, headers: { 'Cache-Control': 'no-store' } },
     )
   }
 
@@ -252,7 +261,7 @@ Produce structured JSON output following the schema in your system prompt.`
     .single()
 
   if (insertError) {
-    return NextResponse.json({ error: insertError.message }, { status: 500 })
+    return NextResponse.json({ error: insertError.message }, { status: 500, headers: { 'Cache-Control': 'no-store' } })
   }
 
   // Fire-and-forget compliance check — result writes back asynchronously
@@ -262,5 +271,5 @@ Produce structured JSON output following the schema in your system prompt.`
     body: JSON.stringify({ content_id: row.id }),
   }).catch((err) => console.error('[content/generate] compliance trigger failed:', err))
 
-  return NextResponse.json({ ok: true, id: row.id, content_type })
+  return NextResponse.json({ ok: true, id: row.id, content_type }, { headers: { 'Cache-Control': 'no-store' } })
 }

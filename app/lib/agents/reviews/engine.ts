@@ -46,6 +46,7 @@ export async function analyseReviews(
     body: string
     review_date?: string
   }>,
+  model?: string,
 ): Promise<ReviewAnalysisResult> {
   const anthropic = new Anthropic({ apiKey: process.env.ANTHROPIC_API_KEY! })
 
@@ -93,7 +94,7 @@ Return ONLY a valid JSON array (no markdown):
 [{"id":"uuid","sentiment":"positive","themes":["recovery"],"key_quote":"...","repurpose_suggestions":{...},"response_needed":false}]`
 
     const response = await anthropic.messages.create({
-      model: MODEL,
+      model: model ?? MODEL,
       max_tokens: 2048,
       messages: [{ role: 'user', content: prompt }],
     })

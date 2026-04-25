@@ -31,6 +31,7 @@
 import { NextRequest, NextResponse } from 'next/server'
 import Anthropic from '@anthropic-ai/sdk'
 import { createAdminClient } from '@/lib/supabase/admin'
+import { getAgentConfig } from '@/lib/llm/provider'
 import { CONTENT_STRATEGY_PROMPT, COMPLIANCE_PROMPT } from '@/lib/agents/prompts'
 
 // ─── Types ────────────────────────────────────────────────────────────────────
@@ -100,7 +101,7 @@ type FailedItem = {
 // ─── Constants ────────────────────────────────────────────────────────────────
 
 const MAX_COMPLIANCE_ATTEMPTS = 3
-const MODEL = 'claude-sonnet-4-6'
+const DEFAULT_MODEL = 'claude-sonnet-4-6'
 
 // ─── Auth ─────────────────────────────────────────────────────────────────────
 
@@ -148,13 +149,14 @@ async function callContentStrategy(
   brandId: string,
   brief: ContentBrief,
   violations: ComplianceViolation[] | null,
+  model: string,
 ): Promise<{ output: ContentStrategyOutput; usage: Anthropic.Usage }> {
   const userContent = violations
     ? `Brand: ${brandId}\n\nBrief:\n${JSON.stringify(brief, null, 2)}\n\nThe previous version of this content failed compliance. Fix ALL of these violations before generating new content:\n${JSON.stringify(violations, null, 2)}`
     : `Brand: ${brandId}\n\nBrief:\n${JSON.stringify(brief, null, 2)}`
 
   const response = await anthropic.messages.create({
-    model: MODEL,
+    model,
     max_tokens: 4096,
     system: [
       {
@@ -181,9 +183,10 @@ async function callContentStrategy(
 async function callCompliance(
   anthropic: Anthropic,
   piece: ContentPiece,
+  model: string,
 ): Promise<{ output: ComplianceOutput; usage: Anthropic.Usage }> {
   const response = await anthropic.messages.create({
-    model: MODEL,
+    model,
     max_tokens: 2048,
     system: [
       {
@@ -273,6 +276,7 @@ async function runPieceThroughCompliance(
   attempt: number,
   csTotalTokensIn: number,
   csTotalTokensOut: number,
+  complianceModel: string,
 ): Promise<{
   inserted?: InsertedItem
   failed?: FailedItem
@@ -284,7 +288,7 @@ async function runPieceThroughCompliance(
   let compTokensOut = 0
 
   // Run compliance check
-  const { output: comp, usage: compUsage } = await callCompliance(anthropic, piece)
+  const { output: comp, usage: compUsage } = await callCompliance(anthropic, piece, complianceModel)
   compTokensIn += compUsage.input_tokens
   compTokensOut += compUsage.output_tokens
 
@@ -351,7 +355,23 @@ export async function POST(req: NextRequest) {
 
   const { brand_id, brief } = validated
 
-  // 3. Initialise clients
+  // 3. Check agent_config enabled + resolve models
+  const [contentCfg, complianceCfg] = await Promise.all([
+    getAgentConfig(brand_id, 'content'),
+    getAgentConfig(brand_id, 'compliance'),
+  ])
+
+  if (!contentCfg.enabled) {
+    return NextResponse.json(
+      { error: `Agent content disabled for brand ${brand_id}`, success: false, disabled: true },
+      { status: 200 },
+    )
+  }
+
+  const csModel = contentCfg.model ?? DEFAULT_MODEL
+  const complianceModel = complianceCfg.model ?? DEFAULT_MODEL
+
+  // 4. Initialise clients
   let supabase: ReturnType<typeof createAdminClient>
   try {
     supabase = createAdminClient()
@@ -362,7 +382,7 @@ export async function POST(req: NextRequest) {
 
   const anthropic = new Anthropic({ apiKey: process.env.ANTHROPIC_API_KEY })
 
-  // 4. Run the pipeline
+  // 5. Run the pipeline
   const inserted: InsertedItem[] = []
   const failed: FailedItem[] = []
 
@@ -384,6 +404,7 @@ export async function POST(req: NextRequest) {
       brand_id,
       brief,
       null,
+      csModel,
     )
     csTotalTokensIn += csUsage.input_tokens
     csTotalTokensOut += csUsage.output_tokens
@@ -452,6 +473,7 @@ export async function POST(req: NextRequest) {
           attempt,
           csTotalTokensIn,
           csTotalTokensOut,
+          complianceModel,
         )
         compTokensIn += result.compTokensIn
         compTokensOut += result.compTokensOut
@@ -536,6 +558,7 @@ export async function POST(req: NextRequest) {
           brand_id,
           retryBrief as ContentBrief & { compliance_violations: ComplianceViolation[] },
           allViolations,
+          csModel,
         )
         csTotalTokensIn += csRetryUsage.input_tokens
         csTotalTokensOut += csRetryUsage.output_tokens

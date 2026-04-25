@@ -509,6 +509,112 @@ export async function executeToolCall(
       }
     }
 
+    case 'get_orders': {
+      const period = (input.period as string | undefined) ?? '30d'
+      const limit = Math.min((input.limit as number | undefined) ?? 20, 50)
+
+      const periodDays: Record<string, number> = { today: 0, '7d': 6, '30d': 29, '90d': 89 }
+      const days = periodDays[period] ?? 29
+      const start = daysAgoISO(days)
+      const end = todayISO()
+
+      const [{ data: orders }, { data: prevOrders }] = await Promise.all([
+        supabase
+          .from('orders')
+          .select('id, shopify_order_number, email, financial_status, total_price, currency, order_created_at, line_item_count')
+          .eq('brand_id', brandId)
+          .gte('order_created_at', start)
+          .lte('order_created_at', end + 'T23:59:59Z')
+          .order('order_created_at', { ascending: false })
+          .limit(limit),
+        supabase
+          .from('orders')
+          .select('total_price')
+          .eq('brand_id', brandId)
+          .gte('order_created_at', daysAgoISO(days * 2 + 1))
+          .lte('order_created_at', daysAgoISO(days + 1) + 'T23:59:59Z'),
+      ])
+
+      const revenue = (orders ?? []).reduce((s, o) => s + Number(o.total_price ?? 0), 0)
+      const orderCount = orders?.length ?? 0
+      const aov = orderCount > 0 ? revenue / orderCount : 0
+      const prevRevenue = (prevOrders ?? []).reduce((s, o) => s + Number(o.total_price ?? 0), 0)
+      const revChange = prevRevenue > 0 ? ((revenue - prevRevenue) / prevRevenue) * 100 : null
+
+      return {
+        ok: true,
+        summary: {
+          revenue: Math.round(revenue * 100) / 100,
+          orders: orderCount,
+          aov: Math.round(aov * 100) / 100,
+          currency: orders?.[0]?.currency ?? 'AUD',
+          vs_previous_period: revChange != null ? `${revChange > 0 ? '+' : ''}${revChange.toFixed(1)}%` : null,
+        },
+        recent_orders: (orders ?? []).map(o => ({
+          order_number: o.shopify_order_number,
+          email: o.email,
+          status: o.financial_status,
+          total: Number(o.total_price ?? 0),
+          items: o.line_item_count,
+          date: o.order_created_at,
+        })),
+      }
+    }
+
+    case 'get_customers': {
+      const limit = Math.min((input.limit as number | undefined) ?? 20, 50)
+      const sort = (input.sort as string | undefined) ?? 'total_spent'
+      const validSorts = ['total_spent', 'orders_count', 'last_order_at']
+      const sortCol = validSorts.includes(sort) ? sort : 'total_spent'
+
+      const thirtyDaysAgo = daysAgoISO(30)
+
+      const [{ data: topCustomers }, { count: newCount }, { count: totalCount }] = await Promise.all([
+        supabase
+          .from('customers')
+          .select('id, email, first_name, last_name, orders_count, total_spent, currency, country, last_order_at')
+          .eq('brand_id', brandId)
+          .order(sortCol, { ascending: false })
+          .limit(limit),
+        supabase
+          .from('customers')
+          .select('id', { count: 'exact', head: true })
+          .eq('brand_id', brandId)
+          .gte('first_order_at', thirtyDaysAgo),
+        supabase
+          .from('customers')
+          .select('id', { count: 'exact', head: true })
+          .eq('brand_id', brandId),
+      ])
+
+      const countryCounts: Record<string, number> = {}
+      for (const c of topCustomers ?? []) {
+        if (c.country) countryCounts[c.country] = (countryCounts[c.country] ?? 0) + 1
+      }
+      const topCountries = Object.entries(countryCounts)
+        .sort((a, b) => b[1] - a[1])
+        .slice(0, 5)
+        .map(([country, count]) => ({ country, count }))
+
+      const total = totalCount ?? 0
+      const newLast30d = newCount ?? 0
+      const returningPct = total > 0 ? Math.round(((total - newLast30d) / total) * 100) : 0
+
+      return {
+        ok: true,
+        summary: { total, new_last_30d: newLast30d, returning_pct: returningPct, top_countries: topCountries },
+        top_customers: (topCustomers ?? []).map(c => ({
+          name: [c.first_name, c.last_name].filter(Boolean).join(' ') || c.email || 'Unknown',
+          email: c.email,
+          orders: c.orders_count,
+          total_spent: Number(c.total_spent ?? 0),
+          currency: c.currency,
+          country: c.country,
+          last_order: c.last_order_at,
+        })),
+      }
+    }
+
     case 'analyse_reviews': {
       const reviews = input.reviews as Array<{
         source: string

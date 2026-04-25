@@ -7,6 +7,7 @@ import Anthropic from '@anthropic-ai/sdk'
 import { createClient } from '@supabase/supabase-js'
 
 import { runCompliance, calculateResultCost } from '@/lib/agents/compliance/engine'
+import { getAgentConfig } from '@/lib/llm/provider'
 import type {
   ComplianceCheckRequest,
   ComplianceCheckResponse,
@@ -66,6 +67,15 @@ export async function POST(req: NextRequest): Promise<NextResponse<ComplianceChe
       )
     }
 
+    // Check agent_config — respect enabled flag and model override
+    const agentCfg = await getAgentConfig(contentRow.brand_id, 'compliance')
+    if (!agentCfg.enabled) {
+      return NextResponse.json(
+        { success: false, disabled: true, message: `Agent compliance disabled for brand ${contentRow.brand_id}` },
+        { status: 200, headers: { 'Cache-Control': 'no-store' } },
+      )
+    }
+
     // Skip if already checked and not forced
     if (!body.force && contentRow.compliance_status && contentRow.compliance_status !== 'pending') {
       return NextResponse.json(
@@ -88,9 +98,15 @@ export async function POST(req: NextRequest): Promise<NextResponse<ComplianceChe
       )
     }
 
+    const brandCompliance = (brandRow.compliance ?? {}) as Partial<ComplianceConfig>
     const config: ComplianceConfig = {
       ...DEFAULT_CONFIG,
-      ...(brandRow.compliance ?? {}),
+      ...brandCompliance,
+      llm_config: {
+        fast: brandCompliance.llm_config?.fast ?? 'claude-haiku-4-5-20251001',
+        accurate: agentCfg.model,
+        premium: brandCompliance.llm_config?.premium ?? 'claude-opus-4-7',
+      },
     }
 
     // 3. Build rule pack fetcher — caches across the request

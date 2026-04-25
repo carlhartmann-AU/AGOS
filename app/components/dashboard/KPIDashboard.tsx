@@ -2,7 +2,8 @@
 'use client'
 
 import { useCallback, useEffect, useRef, useState, useTransition } from 'react'
-import type { KPIResult, WindowKey } from '@/lib/triple-whale/kpis'
+import type { WindowKey } from '@/lib/triple-whale/kpis'
+import type { CommerceKPIResult } from '@/lib/kpi/commerce-metrics'
 
 interface Props {
   brandId: string
@@ -56,7 +57,7 @@ export default function KPIDashboard({ brandId, initialCurrency }: Props) {
   // avoid stale closures without adding currency to every dependency array.
   const currencyRef = useRef(currency)
 
-  const [kpis, setKpis] = useState<KPIResult | null>(null)
+  const [kpis, setKpis] = useState<CommerceKPIResult | null>(null)
   const [loading, setLoading] = useState(true)
   const [refreshing, setRefreshing] = useState(false)
   const [error, setError] = useState<string | null>(null)
@@ -71,7 +72,7 @@ export default function KPIDashboard({ brandId, initialCurrency }: Props) {
       if (c) params.set('currency', c)
       const res = await fetch(`/api/kpis?${params.toString()}`, { cache: 'no-store' })
       if (!res.ok) throw new Error(`KPI fetch failed: ${res.status}`)
-      const data = (await res.json()) as KPIResult
+      const data = (await res.json()) as CommerceKPIResult
       setKpis(data)
       // First load only: if no currency was pre-selected, adopt the brand default from
       // the API response. Update ref + state without triggering a second fetch
@@ -120,7 +121,7 @@ export default function KPIDashboard({ brandId, initialCurrency }: Props) {
       if (currencyRef.current) params.set('currency', currencyRef.current)
       const res = await fetch(`/api/kpis?${params.toString()}`, { cache: 'no-store' })
       if (!res.ok) throw new Error(`KPI fetch failed: ${res.status}`)
-      const fresh = (await res.json()) as KPIResult
+      const fresh = (await res.json()) as CommerceKPIResult
       startTransition(() => setKpis(fresh))
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Refresh failed')
@@ -198,12 +199,19 @@ export default function KPIDashboard({ brandId, initialCurrency }: Props) {
       {loading && !kpis ? (
         <KPIGridSkeleton />
       ) : kpis ? (
-        <div className="kpi-grid">
-          <KPITile label="Revenue" value={formatCurrency(kpis.revenue, displayCurrency)} />
-          <KPITile label="Orders" value={kpis.orders.toLocaleString()} />
-          <KPITile label="AOV" value={formatCurrency(kpis.aov, displayCurrency)} />
-          <KPITile label="New Customers" value={kpis.new_customers.toLocaleString()} />
-        </div>
+        <>
+          <div className="kpi-grid">
+            <KPITile label="Revenue" value={formatCurrency(kpis.revenue, displayCurrency)} />
+            <KPITile label="Orders" value={kpis.orders.toLocaleString()} />
+            <KPITile label="AOV" value={formatCurrency(kpis.aov, displayCurrency)} />
+            <KPITile label="New Customers" value={kpis.new_customers.toLocaleString()} />
+          </div>
+          {kpis.source && (
+            <div style={{ marginTop: 8, fontSize: 11, color: 'var(--ink-5)', fontFamily: 'monospace' }}>
+              via {kpis.source === 'shopify' ? 'Shopify' : 'Triple Whale'}
+            </div>
+          )}
+        </>
       ) : null}
     </div>
   )

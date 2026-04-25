@@ -130,6 +130,7 @@ export async function generateOutreachCopy(
   supabase: SupabaseClient,
   prospectId: string,
   channel: 'email' | 'linkedin',
+  model?: string,
 ): Promise<OutreachCopyResult> {
   const anthropic = new Anthropic({ apiKey: process.env.ANTHROPIC_API_KEY! })
 
@@ -191,7 +192,7 @@ ${channel === 'email'
 }`
 
   const response = await anthropic.messages.create({
-    model: MODEL,
+    model: model ?? MODEL,
     max_tokens: 512,
     messages: [{ role: 'user', content: prompt }],
   })

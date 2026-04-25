@@ -1,11 +1,13 @@
 // app/api/kpis/route.ts
 // GET /api/kpis?brand_id=X&window=24h|7d|30d|mtd&currency=AUD
 //
-// If currency is omitted, uses brand_settings.display_currency (or USD fallback).
+// Resolves the active commerce_data source for the brand (Shopify or Triple Whale)
+// and returns unified KPI metrics. If currency is omitted, uses brand_settings.display_currency.
 
 import { NextRequest, NextResponse } from 'next/server'
 import { createClient } from '@supabase/supabase-js'
-import { getKPIs, type WindowKey } from '@/lib/triple-whale/kpis'
+import { type WindowKey } from '@/lib/triple-whale/kpis'
+import { getCommerceKPIs } from '@/lib/kpi/commerce-metrics'
 
 export const dynamic = 'force-dynamic'
 
@@ -56,7 +58,8 @@ export async function GET(req: NextRequest) {
       displayCurrency = brand?.display_currency ?? 'USD'
     }
 
-    const kpis = await getKPIs(supabase, brandId, window, displayCurrency ?? 'USD')
+    // Use data-source-aware commerce metrics (Shopify direct or Triple Whale)
+    const kpis = await getCommerceKPIs(supabase, brandId, window, displayCurrency ?? 'USD')
     return NextResponse.json(kpis, { headers: { 'Cache-Control': 'no-store' } })
   } catch (err) {
     console.error('KPI read error:', err)

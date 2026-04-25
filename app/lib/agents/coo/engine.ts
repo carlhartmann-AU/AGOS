@@ -75,6 +75,7 @@ export async function runCOOChat(
   conversationId: string,
   userMessage: string,
   onChunk: (chunk: COOStreamChunk) => void,
+  model?: string,
 ): Promise<void> {
   const anthropic = new Anthropic({ apiKey: process.env.ANTHROPIC_API_KEY! })
 
@@ -105,7 +106,7 @@ export async function runCOOChat(
   // 3. Tool-use streaming loop
   while (true) {
     const stream = anthropic.messages.stream({
-      model: MODEL,
+      model: model ?? MODEL,
       max_tokens: MAX_TOKENS,
       system: COO_SYSTEM_PROMPT,
       tools,

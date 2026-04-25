@@ -166,6 +166,7 @@ Return ONLY valid JSON:
 export async function generateTicketResponse(
   supabase: SupabaseClient,
   ticketId: string,
+  model?: string,
 ): Promise<{ draft: string; confidence: number }> {
   const anthropic = new Anthropic({ apiKey: process.env.ANTHROPIC_API_KEY! })
 
@@ -173,7 +174,7 @@ export async function generateTicketResponse(
   if (!ticket) return { draft: '', confidence: 0 }
 
   const response = await anthropic.messages.create({
-    model: MODEL,
+    model: model ?? MODEL,
     max_tokens: 512,
     messages: [{
       role: 'user',

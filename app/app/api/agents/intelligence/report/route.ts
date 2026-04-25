@@ -2,6 +2,7 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { createAdminClient } from '@/lib/supabase/admin'
 import { runIntelligence } from '@/lib/agents/intelligence/engine'
+import { getAgentConfig } from '@/lib/llm/provider'
 
 export const dynamic = 'force-dynamic'
 export const maxDuration = 60
@@ -25,7 +26,16 @@ export async function POST(req: NextRequest) {
     const windowEnd = body.window_end ?? end
 
     const supabase = createAdminClient()
-    const report = await runIntelligence(supabase, brandId, windowStart, windowEnd, 'manual')
+
+    const agentCfg = await getAgentConfig(brandId, 'intelligence')
+    if (!agentCfg.enabled) {
+      return NextResponse.json(
+        { ok: false, disabled: true, message: `Agent intelligence disabled for brand ${brandId}` },
+        { status: 200, headers: { 'Cache-Control': 'no-store' } },
+      )
+    }
+
+    const report = await runIntelligence(supabase, brandId, windowStart, windowEnd, 'manual', agentCfg.model)
 
     return NextResponse.json({ ok: true, report }, { headers: { 'Cache-Control': 'no-store' } })
   } catch (err) {

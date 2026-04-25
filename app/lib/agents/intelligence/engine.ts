@@ -12,7 +12,8 @@ export async function runIntelligence(
   brandId: string,
   windowStart: string,
   windowEnd: string,
-  triggeredBy: 'cron' | 'manual'
+  triggeredBy: 'cron' | 'manual',
+  model?: string,
 ): Promise<IntelligenceReport> {
   const startedAt = Date.now()
 
@@ -53,7 +54,7 @@ export async function runIntelligence(
           .single()
         const llmConfig = (bsRow?.compliance as Record<string, Record<string, string>> | null)?.llm_config
 
-        const narResult = await runNarrator(revenue, content, compliance, anomalies, llmConfig)
+        const narResult = await runNarrator(revenue, content, compliance, anomalies, llmConfig, model)
         narrative = narResult.narrative
         recommendations = narResult.recommendations
         tokens = narResult.tokens

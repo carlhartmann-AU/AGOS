@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { createAdminClient } from '@/lib/supabase/admin'
 import { runCFOAnalysis } from '@/lib/agents/cfo/engine'
+import { getAgentConfig } from '@/lib/llm/provider'
 
 export const maxDuration = 60
 
@@ -29,11 +30,17 @@ export async function GET(req: NextRequest) {
   const window_start = fyStart.toISOString().slice(0, 10)
   const window_end = today.toISOString().slice(0, 10)
 
-  const results: Array<{ brand_id: string; status: string; report_id?: string; error?: string }> = []
+  const results: Array<{ brand_id: string; status: string; report_id?: string; error?: string; reason?: string }> = []
 
   for (const brand of brands) {
+    const agentCfg = await getAgentConfig(brand.brand_id, 'cfo')
+    if (!agentCfg.enabled) {
+      console.log(`Agent cfo disabled for brand ${brand.brand_id}, skipping cron.`)
+      results.push({ brand_id: brand.brand_id, status: 'disabled' })
+      continue
+    }
     try {
-      const report = await runCFOAnalysis(supabase, brand.brand_id, window_start, window_end, 'cron')
+      const report = await runCFOAnalysis(supabase, brand.brand_id, window_start, window_end, 'cron', agentCfg.model)
       results.push({ brand_id: brand.brand_id, status: 'ok', report_id: report.id })
     } catch (err) {
       console.error(`[cfo-weekly] ${brand.brand_id} failed:`, err)

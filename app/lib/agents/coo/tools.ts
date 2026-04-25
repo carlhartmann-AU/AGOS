@@ -205,6 +205,28 @@ export const COO_TOOLS: COOTool[] = [
     },
   },
   {
+    name: 'get_orders',
+    description: 'Returns recent order data including revenue summary and individual orders. Queries the local orders table — fast and context-safe.',
+    input_schema: {
+      type: 'object',
+      properties: {
+        period: { type: 'string', enum: ['today', '7d', '30d', '90d'], description: 'Lookback period. Default 30d.' },
+        limit: { type: 'number', description: 'Max recent orders to return (default 20, max 50).' },
+      },
+    },
+  },
+  {
+    name: 'get_customers',
+    description: 'Returns customer summary and top customers by spend, order count, or last order date.',
+    input_schema: {
+      type: 'object',
+      properties: {
+        limit: { type: 'number', description: 'Max customers to return (default 20, max 50).' },
+        sort: { type: 'string', enum: ['total_spent', 'orders_count', 'last_order_at'], description: 'Sort field. Default total_spent.' },
+      },
+    },
+  },
+  {
     name: 'analyse_reviews',
     description: 'Submit new customer reviews for sentiment analysis and theme extraction.',
     input_schema: {

@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { createAdminClient } from '@/lib/supabase/admin'
 import { analyseReviews } from '@/lib/agents/reviews/engine'
+import { getAgentConfig } from '@/lib/llm/provider'
 
 export const dynamic = 'force-dynamic'
 
@@ -43,8 +44,16 @@ export async function POST(req: NextRequest) {
     if (!Array.isArray(body.reviews) || !body.reviews.length) {
       return NextResponse.json({ error: 'reviews array required' }, { status: 400, headers: { 'Cache-Control': 'no-store' } })
     }
+    const brandId = body.brand_id ?? 'plasmaide'
+    const agentCfg = await getAgentConfig(brandId, 'review_harvester')
+    if (!agentCfg.enabled) {
+      return NextResponse.json(
+        { disabled: true, message: `Agent review_harvester disabled for brand ${brandId}` },
+        { status: 200, headers: { 'Cache-Control': 'no-store' } },
+      )
+    }
     const supabase = createAdminClient()
-    const result = await analyseReviews(supabase, body.brand_id ?? 'plasmaide', body.reviews)
+    const result = await analyseReviews(supabase, brandId, body.reviews, agentCfg.model)
     return NextResponse.json(result, { headers: { 'Cache-Control': 'no-store' } })
   } catch (err) {
     console.error('[reviews POST]', err)
