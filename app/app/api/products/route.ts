@@ -20,7 +20,7 @@ export async function GET(req: NextRequest) {
     .order('title', { ascending: true })
     .range(offset, offset + limit - 1)
 
-  if (status) query = query.eq('status', status)
+  if (status && status.trim() !== '') query = query.eq('status', status.trim())
   if (search) query = query.ilike('title', `%${search}%`)
 
   const { data, error, count } = await query

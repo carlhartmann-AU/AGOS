@@ -68,6 +68,15 @@ query GetProducts($first: Int!, $after: String) {
           image {
             url
           }
+          inventoryItem {
+            inventoryLevels(first: 10) {
+              nodes {
+                quantities(names: ["available"]) {
+                  quantity
+                }
+              }
+            }
+          }
           createdAt
           updatedAt
         }
@@ -89,6 +98,13 @@ interface ShopifyVariant {
   position: number
   selectedOptions: Array<{ name: string; value: string }>
   image: { url: string } | null
+  inventoryItem: {
+    inventoryLevels: {
+      nodes: Array<{
+        quantities: Array<{ quantity: number }>
+      }>
+    }
+  } | null
   createdAt: string
   updatedAt: string
 }
@@ -220,6 +236,10 @@ export async function syncProducts(
         const optionValues: Record<string, string> = {}
         variant.selectedOptions.forEach(o => { optionValues[o.name] = o.value })
 
+        const inventoryQuantity = variant.inventoryItem?.inventoryLevels.nodes
+          .flatMap(level => level.quantities)
+          .reduce((sum, q) => sum + q.quantity, 0) ?? 0
+
         const { error: variantError } = await supabase
           .from('product_variants')
           .upsert({
@@ -231,6 +251,7 @@ export async function syncProducts(
             price: parseFloat(variant.price),
             compare_at_price: variant.compareAtPrice ? parseFloat(variant.compareAtPrice) : null,
             inventory_policy: variant.inventoryPolicy,
+            inventory_quantity: inventoryQuantity,
             position: variant.position,
             option_values: optionValues,
             image_url: variant.image?.url ?? null,
