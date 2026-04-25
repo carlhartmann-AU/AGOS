@@ -57,13 +57,9 @@ query GetProducts($first: Int!, $after: String) {
           id
           title
           sku
-          barcode
           price
           compareAtPrice
-          inventoryQuantity
           inventoryPolicy
-          requiresShipping
-          taxable
           position
           selectedOptions {
             name
@@ -87,13 +83,9 @@ interface ShopifyVariant {
   id: string
   title: string
   sku: string | null
-  barcode: string | null
   price: string
   compareAtPrice: string | null
-  inventoryQuantity: number | null
   inventoryPolicy: string
-  requiresShipping: boolean
-  taxable: boolean
   position: number
   selectedOptions: Array<{ name: string; value: string }>
   image: { url: string } | null
@@ -236,13 +228,9 @@ export async function syncProducts(
             shopify_variant_id: variant.id,
             title: variant.title,
             sku: variant.sku,
-            barcode: variant.barcode,
             price: parseFloat(variant.price),
             compare_at_price: variant.compareAtPrice ? parseFloat(variant.compareAtPrice) : null,
-            inventory_quantity: variant.inventoryQuantity,
             inventory_policy: variant.inventoryPolicy,
-            requires_shipping: variant.requiresShipping,
-            taxable: variant.taxable,
             position: variant.position,
             option_values: optionValues,
             image_url: variant.image?.url ?? null,
