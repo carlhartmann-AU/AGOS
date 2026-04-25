@@ -23,9 +23,15 @@ export async function GET(req: NextRequest) {
   if (status && status.trim() !== '') query = query.eq('status', status.trim())
   if (search) query = query.ilike('title', `%${search}%`)
 
+  // Diagnostic: simple count without embedded select to isolate the issue
+  const { count: simpleCount, error: simpleError } = await supabase
+    .from('products')
+    .select('id', { count: 'exact', head: true })
+    .eq('brand_id', brand_id)
+
   const { data, error, count } = await query
 
-  console.log(`[/api/products] brand_id=${brand_id} status=${status ?? 'null'} err=${error?.message ?? 'null'} count=${count} rows=${data?.length ?? 'null'}`)
+  console.log(`[/api/products] brand_id=${brand_id} status=${status ?? 'null'} simple=${simpleCount} simpleErr=${simpleError?.message ?? 'null'} embedded=${count} embeddedErr=${error?.message ?? 'null'} rows=${data?.length ?? 'null'}`)
 
   if (error) return NextResponse.json({ error: error.message }, { status: 500 })
 
