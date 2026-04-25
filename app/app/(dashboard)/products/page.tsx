@@ -70,7 +70,7 @@ export default function ProductsPage() {
       if (search) params.set('search', search)
       if (statusFilter) params.set('status', statusFilter)
 
-      const res = await fetch(`/api/products?${params}`)
+      const res = await fetch(`/api/products?${params}`, { cache: 'no-store' })
       if (res.ok) {
         const data = await res.json() as { products: Product[]; total: number }
         setProducts(data.products)

@@ -32,5 +32,5 @@ export async function GET(req: NextRequest) {
     total: count ?? 0,
     limit,
     offset,
-  })
+  }, { headers: { 'Cache-Control': 'no-store' } })
 }
