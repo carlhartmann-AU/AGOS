@@ -25,7 +25,7 @@ interface Product {
   tags: string[] | null
   featured_image_url: string | null
   last_synced_at: string | null
-  product_variants: ProductVariant[]
+  product_variants: ProductVariant[] | null
 }
 
 const STATUS_STYLES: Record<string, string> = {
@@ -127,7 +127,7 @@ export default function ProductsPage() {
             <option value="draft">Draft</option>
             <option value="archived">Archived</option>
           </select>
-          <span className="ml-auto text-sm text-gray-400">{total} product{total !== 1 ? 's' : ''}</span>
+          <span className="ml-auto text-sm text-gray-400">{loading ? '—' : `${total} product${total !== 1 ? 's' : ''}`}</span>
         </div>
 
         {/* Table */}
@@ -181,9 +181,9 @@ export default function ProductsPage() {
                         {product.status}
                       </span>
                     </td>
-                    <td className="px-4 py-3 text-right text-gray-600">{product.product_variants.length}</td>
-                    <td className="px-4 py-3 text-right text-gray-600">{priceRange(product.product_variants)}</td>
-                    <td className="px-4 py-3 text-right text-gray-600">{totalInventory(product.product_variants)}</td>
+                    <td className="px-4 py-3 text-right text-gray-600">{(product.product_variants ?? []).length}</td>
+                    <td className="px-4 py-3 text-right text-gray-600">{priceRange(product.product_variants ?? [])}</td>
+                    <td className="px-4 py-3 text-right text-gray-600">{totalInventory(product.product_variants ?? [])}</td>
                     <td className="px-4 py-3 text-right text-gray-400 text-xs">
                       {product.last_synced_at ? new Date(product.last_synced_at).toLocaleDateString() : '—'}
                     </td>
