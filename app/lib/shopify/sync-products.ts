@@ -69,7 +69,7 @@ query GetProducts($first: Int!, $after: String) {
             url
           }
           inventoryItem {
-            inventoryLevels(first: 10) {
+            inventoryLevels(first: 3) {
               nodes {
                 quantities(names: ["available"]) {
                   quantity
