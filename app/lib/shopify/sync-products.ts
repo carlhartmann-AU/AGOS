@@ -62,8 +62,6 @@ query GetProducts($first: Int!, $after: String) {
           compareAtPrice
           inventoryQuantity
           inventoryPolicy
-          weight
-          weightUnit
           requiresShipping
           taxable
           position
@@ -94,8 +92,6 @@ interface ShopifyVariant {
   compareAtPrice: string | null
   inventoryQuantity: number | null
   inventoryPolicy: string
-  weight: number | null
-  weightUnit: string | null
   requiresShipping: boolean
   taxable: boolean
   position: number
@@ -245,8 +241,6 @@ export async function syncProducts(
             compare_at_price: variant.compareAtPrice ? parseFloat(variant.compareAtPrice) : null,
             inventory_quantity: variant.inventoryQuantity,
             inventory_policy: variant.inventoryPolicy,
-            weight: variant.weight,
-            weight_unit: variant.weightUnit,
             requires_shipping: variant.requiresShipping,
             taxable: variant.taxable,
             position: variant.position,
