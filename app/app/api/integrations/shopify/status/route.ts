@@ -29,5 +29,5 @@ export async function GET(req: NextRequest) {
     configured,
     connected: !!data,
     connection: data ?? null,
-  })
+  }, { headers: { 'Cache-Control': 'no-store' } })
 }

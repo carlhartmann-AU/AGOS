@@ -530,7 +530,7 @@ export default function SettingsPage() {
   const fetchShopifyStatus = useCallback(async (brandId: string) => {
     setShopifyLoading(true)
     try {
-      const res = await fetch(`/api/integrations/shopify/status?brand_id=${brandId}`)
+      const res = await fetch(`/api/integrations/shopify/status?brand_id=${brandId}`, { cache: 'no-store' })
       if (res.ok) setShopifyStatus(await res.json())
     } catch { /* ignore */ } finally {
       setShopifyLoading(false)
@@ -608,8 +608,11 @@ export default function SettingsPage() {
   }, [])
 
   useEffect(() => {
-    if (activeBrand && activeTab === 'integrations') fetchTelegramStatus(activeBrand.brand_id)
-  }, [activeBrand?.brand_id, activeTab, fetchTelegramStatus]) // eslint-disable-line react-hooks/exhaustive-deps
+    if (activeBrand && activeTab === 'integrations') {
+      fetchShopifyStatus(activeBrand.brand_id)
+      fetchTelegramStatus(activeBrand.brand_id)
+    }
+  }, [activeBrand?.brand_id, activeTab, fetchShopifyStatus, fetchTelegramStatus]) // eslint-disable-line react-hooks/exhaustive-deps
 
   // Load team members when team tab selected
   useEffect(() => {
