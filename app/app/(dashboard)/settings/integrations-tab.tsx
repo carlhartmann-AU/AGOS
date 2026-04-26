@@ -559,32 +559,41 @@ function IntegCard({
       </div>
 
       {/* Action buttons */}
-      <div className="mt-3 flex items-center gap-2">
-        {isConnected && !isNative && (
-          <button
-            type="button"
-            onClick={onToggleManage}
-            className="px-2.5 py-1 text-xs rounded border border-gray-200 text-gray-600 hover:bg-gray-50 transition-colors"
-          >
-            {isManaging ? 'Close' : 'Manage'}
-          </button>
-        )}
-        {isConnected && isNative && (
-          <span className="text-xs text-gray-400 italic">Built-in provider</span>
-        )}
-        {!isConnected && isLive && !isNative && (
-          <button
-            type="button"
-            onClick={handleConnect}
-            className="px-2.5 py-1 text-xs rounded border border-blue-200 bg-blue-50 text-blue-700 hover:bg-blue-100 transition-colors"
-          >
-            Connect
-          </button>
+      <div className="mt-3 flex flex-col gap-2">
+        <div className="flex items-center gap-2">
+          {isConnected && !isNative && (
+            <button
+              type="button"
+              onClick={onToggleManage}
+              className="px-2.5 py-1 text-xs rounded border border-gray-200 text-gray-600 hover:bg-gray-50 transition-colors"
+            >
+              {isManaging ? 'Close' : 'Manage'}
+            </button>
+          )}
+          {isConnected && isNative && (
+            <span className="text-xs text-gray-400 italic">Built-in provider</span>
+          )}
+          {!isConnected && isLive && !isNative && (
+            <button
+              type="button"
+              onClick={handleConnect}
+              className="px-2.5 py-1 text-xs rounded border border-blue-200 bg-blue-50 text-blue-700 hover:bg-blue-100 transition-colors"
+            >
+              Connect
+            </button>
+          )}
+        </div>
+        {/* Shopify OAuth error — shown below Connect button when not connected */}
+        {integ.slug === 'shopify' && !isConnected && shopifyErrorBanner && (
+          <div className="flex items-center justify-between px-2.5 py-1.5 bg-red-50 border border-red-200 rounded text-xs text-red-700">
+            <span>Connection failed: {shopifyErrorBanner}</span>
+            <button type="button" onClick={onDismissShopifyError} className="ml-2 text-red-400 hover:text-red-600 shrink-0">✕</button>
+          </div>
         )}
       </div>
 
-      {/* Management panels */}
-      {isManaging && (
+      {/* Management panels — Shopify only renders when actually connected (has valid token) */}
+      {isManaging && (integ.slug !== 'shopify' || isConnected) && (
         <div className="mt-3 border-t border-gray-100 pt-3">
           {integ.slug === 'shopify' && (
             <ShopifyPanel
@@ -1006,7 +1015,8 @@ export function IntegrationsTabContent({
     const tab = searchParams.get('tab')
 
     if (shopifyParam === 'connected') { setShopifySuccessBanner(true); setManageSlug('shopify') }
-    if (shopifyParam === 'error') { setShopifyErrorBanner(searchParams.get('reason') ?? 'Unknown error'); setManageSlug('shopify') }
+    // Error: store banner but don't open manage panel — user needs to see the Connect button to retry
+    if (shopifyParam === 'error') { setShopifyErrorBanner(searchParams.get('reason') ?? 'Unknown error') }
     if (xeroParam === 'connected') { setXeroSuccessBanner(true); setManageSlug('xero') }
     if (xeroParam === 'error') { setXeroErrorBanner(searchParams.get('reason') ?? 'Unknown error'); setManageSlug('xero') }
     if (tab === 'integrations') { /* already on this tab */ }
@@ -1014,6 +1024,13 @@ export function IntegrationsTabContent({
     fetchShopifyStatus()
     fetchXeroStatus()
   }, [brandId]) // eslint-disable-line react-hooks/exhaustive-deps
+
+  // If Shopify panel is open but the token goes offline, close it so Connect button is unobstructed
+  useEffect(() => {
+    if (manageSlug === 'shopify' && shopifyStatus !== null && !shopifyStatus.connected) {
+      setManageSlug(null)
+    }
+  }, [manageSlug, shopifyStatus])
 
   // Shopify handlers
   async function handleShopifyDisconnect() {
