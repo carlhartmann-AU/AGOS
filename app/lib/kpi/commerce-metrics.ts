@@ -76,7 +76,7 @@ async function getMetricsFromShopify(
   }))
 
   // FX conversion: convert each day's revenue from source currency to displayCurrency
-  const uniqueSourceCurrencies = [...new Set(rawDaily.map(d => d.source_currency))]
+  const uniqueSourceCurrencies = Array.from(new Set(rawDaily.map(d => d.source_currency)))
   const fxMap = new Map<string, Record<string, number>>()
   const today = new Date().toISOString().slice(0, 10)
   await Promise.all(uniqueSourceCurrencies.map(async src => {
