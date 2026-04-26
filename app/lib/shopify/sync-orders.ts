@@ -15,8 +15,8 @@ query GetOrders($first: Int!, $after: String, $query: String) {
       id
       name
       email
-      financialStatus
-      fulfillmentStatus
+      displayFinancialStatus
+      displayFulfillmentStatus
       currencyCode
       totalPriceSet {
         shopMoney { amount }
@@ -36,9 +36,7 @@ query GetOrders($first: Int!, $after: String, $query: String) {
       totalRefundedSet {
         shopMoney { amount }
       }
-      lineItems {
-        totalCount
-      }
+      subtotalLineItemsQuantity
       sourceName
       tags
       customer {
@@ -59,8 +57,8 @@ interface ShopifyOrder {
   id: string
   name: string
   email: string | null
-  financialStatus: string
-  fulfillmentStatus: string | null
+  displayFinancialStatus: string
+  displayFulfillmentStatus: string | null
   currencyCode: string
   totalPriceSet: MoneySet
   subtotalPriceSet: MoneySet
@@ -68,7 +66,7 @@ interface ShopifyOrder {
   totalDiscountsSet: MoneySet
   totalShippingPriceSet: MoneySet
   totalRefundedSet: MoneySet
-  lineItems: { totalCount: number }
+  subtotalLineItemsQuantity: number
   sourceName: string | null
   tags: string[]
   customer: { id: string } | null
@@ -169,8 +167,8 @@ export async function syncOrders(
         shopify_order_id: order.id,
         shopify_order_number: order.name,
         email: order.email,
-        financial_status: order.financialStatus.toLowerCase(),
-        fulfillment_status: order.fulfillmentStatus?.toLowerCase() ?? null,
+        financial_status: order.displayFinancialStatus.toLowerCase(),
+        fulfillment_status: order.displayFulfillmentStatus?.toLowerCase() ?? null,
         currency: order.currencyCode,
         total_price: money(order.totalPriceSet),
         subtotal_price: money(order.subtotalPriceSet),
@@ -178,7 +176,7 @@ export async function syncOrders(
         total_discounts: money(order.totalDiscountsSet),
         total_shipping: money(order.totalShippingPriceSet),
         total_refunded: money(order.totalRefundedSet),
-        line_item_count: order.lineItems.totalCount,
+        line_item_count: order.subtotalLineItemsQuantity,
         source_name: order.sourceName,
         tags: order.tags,
         customer_id: shopifyCustomerId ? (customerMap.get(shopifyCustomerId) ?? null) : null,

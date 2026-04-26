@@ -10,10 +10,15 @@ query GetCustomers($first: Int!, $after: String) {
     }
     nodes {
       id
-      email
+      defaultEmailAddress {
+        emailAddress
+        marketingState
+      }
+      defaultPhoneNumber {
+        phoneNumber
+      }
       firstName
       lastName
-      phone
       numberOfOrders
       amountSpent {
         amount
@@ -21,9 +26,6 @@ query GetCustomers($first: Int!, $after: String) {
       }
       tags
       state
-      emailMarketingConsent {
-        marketingState
-      }
       defaultAddress {
         city
         province
@@ -45,15 +47,14 @@ query GetCustomers($first: Int!, $after: String) {
 
 interface ShopifyCustomer {
   id: string
-  email: string | null
+  defaultEmailAddress: { emailAddress: string | null; marketingState: string | null } | null
+  defaultPhoneNumber: { phoneNumber: string | null } | null
   firstName: string | null
   lastName: string | null
-  phone: string | null
   numberOfOrders: number
   amountSpent: { amount: string; currencyCode: string }
   tags: string[]
   state: string
-  emailMarketingConsent: { marketingState: string } | null
   defaultAddress: {
     city: string | null
     province: string | null
@@ -109,7 +110,7 @@ export async function syncCustomers(
   let customersUpserted = 0
 
   for (const customer of allCustomers) {
-    const accepts = customer.emailMarketingConsent?.marketingState === 'SUBSCRIBED'
+    const accepts = customer.defaultEmailAddress?.marketingState === 'SUBSCRIBED'
     const firstOrderAt = customer.firstOrder.nodes[0]?.processedAt ?? null
     const lastOrderAt = customer.lastOrder.nodes[0]?.processedAt ?? null
 
@@ -118,10 +119,10 @@ export async function syncCustomers(
       .upsert({
         brand_id: brandId,
         shopify_customer_id: customer.id,
-        email: customer.email,
+        email: customer.defaultEmailAddress?.emailAddress ?? null,
         first_name: customer.firstName,
         last_name: customer.lastName,
-        phone: customer.phone,
+        phone: customer.defaultPhoneNumber?.phoneNumber ?? null,
         orders_count: customer.numberOfOrders,
         total_spent: parseFloat(customer.amountSpent.amount),
         currency: customer.amountSpent.currencyCode,
