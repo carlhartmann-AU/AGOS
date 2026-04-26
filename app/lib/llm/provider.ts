@@ -9,7 +9,7 @@ export interface LLMConfig {
 
 const DEFAULT_CONFIG: LLMConfig = {
   provider: 'anthropic',
-  model: 'claude-sonnet-4-6-20250415',
+  model: 'claude-sonnet-4-6',
 }
 
 export async function getLLMConfig(brandId: string, agentKey: string): Promise<LLMConfig> {

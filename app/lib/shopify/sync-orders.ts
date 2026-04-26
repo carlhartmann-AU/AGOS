@@ -160,42 +160,42 @@ export async function syncOrders(
     cursor = page.pageInfo.endCursor
   }
 
-  let ordersUpserted = 0
-
-  for (const order of allOrders) {
+  // Build all rows first, then batch-upsert in chunks of 100
+  const rows = allOrders.map(order => {
     const shopifyCustomerId = order.customer?.id ?? null
-    const customerId = shopifyCustomerId ? (customerMap.get(shopifyCustomerId) ?? null) : null
+    return {
+      brand_id: brandId,
+      shopify_order_id: order.id,
+      shopify_order_number: order.name,
+      email: order.email,
+      financial_status: order.financialStatus.toLowerCase(),
+      fulfillment_status: order.fulfillmentStatus?.toLowerCase() ?? null,
+      currency: order.currencyCode,
+      total_price: money(order.totalPriceSet),
+      subtotal_price: money(order.subtotalPriceSet),
+      total_tax: money(order.totalTaxSet),
+      total_discounts: money(order.totalDiscountsSet),
+      total_shipping: money(order.totalShippingPriceSet),
+      total_refunded: money(order.totalRefundedSet),
+      line_item_count: order.lineItems.totalCount,
+      source_name: order.sourceName,
+      tags: order.tags,
+      customer_id: shopifyCustomerId ? (customerMap.get(shopifyCustomerId) ?? null) : null,
+      shopify_customer_id: shopifyCustomerId,
+      order_created_at: order.processedAt,
+      order_updated_at: order.updatedAt,
+      synced_at: syncStart,
+      updated_at: syncStart,
+    }
+  })
 
+  const CHUNK = 100
+  for (let i = 0; i < rows.length; i += CHUNK) {
     const { error } = await supabase
       .from('orders')
-      .upsert({
-        brand_id: brandId,
-        shopify_order_id: order.id,
-        shopify_order_number: order.name,
-        email: order.email,
-        financial_status: order.financialStatus.toLowerCase(),
-        fulfillment_status: order.fulfillmentStatus?.toLowerCase() ?? null,
-        currency: order.currencyCode,
-        total_price: money(order.totalPriceSet),
-        subtotal_price: money(order.subtotalPriceSet),
-        total_tax: money(order.totalTaxSet),
-        total_discounts: money(order.totalDiscountsSet),
-        total_shipping: money(order.totalShippingPriceSet),
-        total_refunded: money(order.totalRefundedSet),
-        line_item_count: order.lineItems.totalCount,
-        source_name: order.sourceName,
-        tags: order.tags,
-        customer_id: customerId,
-        shopify_customer_id: shopifyCustomerId,
-        order_created_at: order.processedAt,
-        order_updated_at: order.updatedAt,
-        synced_at: syncStart,
-        updated_at: syncStart,
-      }, { onConflict: 'brand_id,shopify_order_id' })
-
+      .upsert(rows.slice(i, i + CHUNK), { onConflict: 'brand_id,shopify_order_id' })
     if (error) throw new Error(`Order upsert failed: ${error.message}`)
-    ordersUpserted++
   }
 
-  return { orders_synced: ordersUpserted, is_full_backfill: isFullBackfill }
+  return { orders_synced: rows.length, is_full_backfill: isFullBackfill }
 }
