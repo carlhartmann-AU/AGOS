@@ -178,7 +178,21 @@ function ShopifyPanel({
     )
   }
   const conn = shopifyStatus.connection
-  if (!conn) return null
+  if (!conn) {
+    return (
+      <div className="mt-3 space-y-2">
+        {errorBanner && (
+          <div className="flex items-center justify-between px-3 py-2 bg-red-50 border border-red-200 rounded text-xs text-red-700">
+            <span>Connection failed: {errorBanner}</span>
+            <button onClick={onDismissError} className="text-red-400 hover:text-red-600">✕</button>
+          </div>
+        )}
+        <div className="px-3 py-2 bg-amber-50 border border-amber-200 rounded text-xs text-amber-800">
+          OAuth token missing or revoked. Use the <strong>Connect</strong> button to re-authorise.
+        </div>
+      </div>
+    )
+  }
   return (
     <div className="mt-3 space-y-2">
       {successBanner && (
@@ -193,8 +207,8 @@ function ShopifyPanel({
           <button onClick={onDismissError} className="text-red-400 hover:text-red-600">✕</button>
         </div>
       )}
-      <div className="flex items-center justify-between px-3 py-2 bg-gray-50 border border-gray-200 rounded">
-        <div>
+      <div className="flex flex-wrap items-start gap-2 px-3 py-2 bg-gray-50 border border-gray-200 rounded">
+        <div className="flex-1 min-w-0">
           <div className="text-sm font-medium text-gray-800">{conn.shop_name ?? conn.shop_domain}</div>
           <div className="text-xs text-gray-400 mt-0.5">
             {conn.shop_domain} · Connected {new Date(conn.connected_at).toLocaleDateString()}
@@ -202,7 +216,7 @@ function ShopifyPanel({
             {conn.sync_status === 'error' && <span className="ml-1 text-red-500">· Sync error</span>}
           </div>
         </div>
-        <div className="flex items-center gap-2">
+        <div className="flex items-center gap-1.5 flex-wrap flex-shrink-0">
           <button
             type="button"
             onClick={onSync}
@@ -492,7 +506,11 @@ function IntegCard({
   onDdSave: () => void
   ddSaveState: 'idle' | 'saving' | 'saved' | 'error'
 }) {
-  const isConnected = integ.connection?.status === 'connected'
+  // For Shopify, derive connection state from the status route (checks actual token)
+  // rather than brand_integrations alone. Falls back to registry while status loads.
+  const isConnected = (integ.slug === 'shopify' && shopifyStatus !== null)
+    ? shopifyStatus.connected
+    : integ.connection?.status === 'connected'
   const isLive = integ.status === 'live'
   const isNative = integ.auth_type === 'native'
   const isToastSlug = TOAST_SLUGS.has(integ.slug)
