@@ -178,21 +178,7 @@ function ShopifyPanel({
     )
   }
   const conn = shopifyStatus.connection
-  if (!conn) {
-    return (
-      <div className="mt-3 space-y-2">
-        {errorBanner && (
-          <div className="flex items-center justify-between px-3 py-2 bg-red-50 border border-red-200 rounded text-xs text-red-700">
-            <span>Connection failed: {errorBanner}</span>
-            <button onClick={onDismissError} className="text-red-400 hover:text-red-600">✕</button>
-          </div>
-        )}
-        <div className="px-3 py-2 bg-amber-50 border border-amber-200 rounded text-xs text-amber-800">
-          OAuth token missing or revoked. Use the <strong>Connect</strong> button to re-authorise.
-        </div>
-      </div>
-    )
-  }
+  if (!conn) return null
   return (
     <div className="mt-3 space-y-2">
       {successBanner && (
@@ -506,10 +492,14 @@ function IntegCard({
   onDdSave: () => void
   ddSaveState: 'idle' | 'saving' | 'saved' | 'error'
 }) {
-  // For Shopify, derive connection state from the status route (checks actual token)
-  // rather than brand_integrations alone. Falls back to registry while status loads.
-  const isConnected = (integ.slug === 'shopify' && shopifyStatus !== null)
-    ? shopifyStatus.connected
+  // Shopify: shopifyStatus.connected is the sole source of truth.
+  //   null  → still loading   → show "Checking…" badge, no action buttons
+  //   false → no valid token  → show Connect button
+  //   true  → live token      → show Manage button + panel
+  // All other integrations use brand_integrations.status via the registry.
+  const isLoading = integ.slug === 'shopify' && shopifyStatus === null
+  const isConnected = integ.slug === 'shopify'
+    ? shopifyStatus?.connected === true
     : integ.connection?.status === 'connected'
   const isLive = integ.status === 'live'
   const isNative = integ.auth_type === 'native'
@@ -544,7 +534,10 @@ function IntegCard({
         <div className="flex-1 min-w-0">
           <div className="flex items-center gap-2 flex-wrap">
             <span className="text-sm font-semibold text-gray-900">{integ.name}</span>
-            <StatusBadge connected={isConnected} status={integ.status} eta={integ.roadmap_eta} />
+            {isLoading
+              ? <span className="px-2 py-0.5 rounded text-xs bg-gray-100 text-gray-400 animate-pulse">Checking…</span>
+              : <StatusBadge connected={isConnected} status={integ.status} eta={integ.roadmap_eta} />
+            }
           </div>
           {integ.description && (
             <p className="text-xs text-gray-400 mt-1 leading-relaxed">{integ.description}</p>
@@ -558,37 +551,28 @@ function IntegCard({
         </div>
       </div>
 
-      {/* Action buttons */}
-      <div className="mt-3 flex flex-col gap-2">
-        <div className="flex items-center gap-2">
-          {isConnected && !isNative && (
-            <button
-              type="button"
-              onClick={onToggleManage}
-              className="px-2.5 py-1 text-xs rounded border border-gray-200 text-gray-600 hover:bg-gray-50 transition-colors"
-            >
-              {isManaging ? 'Close' : 'Manage'}
-            </button>
-          )}
-          {isConnected && isNative && (
-            <span className="text-xs text-gray-400 italic">Built-in provider</span>
-          )}
-          {!isConnected && isLive && !isNative && (
-            <button
-              type="button"
-              onClick={handleConnect}
-              className="px-2.5 py-1 text-xs rounded border border-blue-200 bg-blue-50 text-blue-700 hover:bg-blue-100 transition-colors"
-            >
-              Connect
-            </button>
-          )}
-        </div>
-        {/* Shopify OAuth error — shown below Connect button when not connected */}
-        {integ.slug === 'shopify' && !isConnected && shopifyErrorBanner && (
-          <div className="flex items-center justify-between px-2.5 py-1.5 bg-red-50 border border-red-200 rounded text-xs text-red-700">
-            <span>Connection failed: {shopifyErrorBanner}</span>
-            <button type="button" onClick={onDismissShopifyError} className="ml-2 text-red-400 hover:text-red-600 shrink-0">✕</button>
-          </div>
+      {/* Action buttons — hidden for Shopify while status is loading */}
+      <div className="mt-3 flex items-center gap-2">
+        {!isLoading && isConnected && !isNative && (
+          <button
+            type="button"
+            onClick={onToggleManage}
+            className="px-2.5 py-1 text-xs rounded border border-gray-200 text-gray-600 hover:bg-gray-50 transition-colors"
+          >
+            {isManaging ? 'Close' : 'Manage'}
+          </button>
+        )}
+        {!isLoading && isConnected && isNative && (
+          <span className="text-xs text-gray-400 italic">Built-in provider</span>
+        )}
+        {!isLoading && !isConnected && isLive && !isNative && (
+          <button
+            type="button"
+            onClick={handleConnect}
+            className="px-2.5 py-1 text-xs rounded border border-blue-200 bg-blue-50 text-blue-700 hover:bg-blue-100 transition-colors"
+          >
+            Connect
+          </button>
         )}
       </div>
 
@@ -1030,16 +1014,9 @@ export function IntegrationsTabContent({
     fetchXeroStatus()
   }, [brandId]) // eslint-disable-line react-hooks/exhaustive-deps
 
-  // If Shopify panel is open but the token goes offline, close it so Connect button is unobstructed
-  useEffect(() => {
-    if (manageSlug === 'shopify' && shopifyStatus !== null && !shopifyStatus.connected) {
-      setManageSlug(null)
-    }
-  }, [manageSlug, shopifyStatus])
-
   // Shopify handlers
   async function handleShopifyDisconnect() {
-    if (!shopifyStatus?.connection) return
+    if (!shopifyStatus?.connection?.shop_domain) return
     if (!confirm('Disconnect Shopify? Product sync will stop, but existing synced data is preserved.')) return
     setShopifyDisconnecting(true)
     try {
