@@ -923,27 +923,28 @@ export function IntegrationsTabContent({
   // n8n webhook base
   const [n8nWebhookBase, setN8nWebhookBase] = useState('')
 
-  // Fetch registry on mount
-  useEffect(() => {
-    setRegistryLoading(true)
-    fetch(`/api/integrations/registry?brand_id=${brandId}`)
-      .then(r => r.ok ? r.json() : { registry: [], connections: [] })
-      .then(data => {
-        const connMap = new Map<string, ConnectionRow>(
-          (data.connections as ConnectionRow[]).map((c: ConnectionRow) => [c.integration_slug, c])
-        )
-        const g: Record<string, IntegWithConn[]> = {}
-        for (const reg of (data.registry as RegistryRow[])) {
-          const conn = connMap.get(reg.slug) ?? null
-          const item: IntegWithConn = { ...reg, connection: conn }
-          if (!g[reg.category]) g[reg.category] = []
-          g[reg.category].push(item)
-        }
-        setGrouped(g)
-      })
-      .catch(() => {})
-      .finally(() => setRegistryLoading(false))
+  // Registry fetch — extracted so disconnect/connect can call it without a page reload
+  const fetchRegistry = useCallback(async (showLoading = true) => {
+    if (showLoading) setRegistryLoading(true)
+    try {
+      const r = await fetch(`/api/integrations/registry?brand_id=${brandId}`, { cache: 'no-store' })
+      const data = r.ok ? await r.json() as { registry: RegistryRow[]; connections: ConnectionRow[] } : { registry: [], connections: [] }
+      const connMap = new Map<string, ConnectionRow>(
+        data.connections.map((c) => [c.integration_slug, c])
+      )
+      const g: Record<string, IntegWithConn[]> = {}
+      for (const reg of data.registry) {
+        const conn = connMap.get(reg.slug) ?? null
+        g[reg.category] ??= []
+        g[reg.category].push({ ...reg, connection: conn })
+      }
+      setGrouped(g)
+    } catch { /* ignore */ } finally {
+      if (showLoading) setRegistryLoading(false)
+    }
   }, [brandId])
+
+  useEffect(() => { fetchRegistry() }, [fetchRegistry])
 
   // Fetch Shopify status
   const fetchShopifyStatus = useCallback(async () => {
@@ -1007,7 +1008,9 @@ export function IntegrationsTabContent({
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ brand_id: brandId, shop_domain: shopifyStatus.connection.shop_domain }),
       })
-      await fetchShopifyStatus()
+      // Refresh both: shopify panel details + registry card state (flips isConnected → shows Connect button)
+      await Promise.all([fetchShopifyStatus(), fetchRegistry(false)])
+      setManageSlug(null)
     } finally { setShopifyDisconnecting(false) }
   }
 
