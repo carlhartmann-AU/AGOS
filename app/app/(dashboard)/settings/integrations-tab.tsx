@@ -1021,6 +1021,11 @@ export function IntegrationsTabContent({
     if (xeroParam === 'error') { setXeroErrorBanner(searchParams.get('reason') ?? 'Unknown error'); setManageSlug('xero') }
     if (tab === 'integrations') { /* already on this tab */ }
 
+    // Strip OAuth return params so they don't re-trigger if the component remounts
+    if (shopifyParam || xeroParam) {
+      window.history.replaceState({}, '', `${window.location.pathname}?tab=integrations`)
+    }
+
     fetchShopifyStatus()
     fetchXeroStatus()
   }, [brandId]) // eslint-disable-line react-hooks/exhaustive-deps
