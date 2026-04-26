@@ -5,6 +5,7 @@
 import type { SupabaseClient } from '@supabase/supabase-js'
 import { getKPIs, resolveWindow, type WindowKey, type KPIResult } from '@/lib/triple-whale/kpis'
 import { getDataSource } from '@/lib/integrations/data-source'
+import { fetchFXRates, convertAmount } from '@/lib/triple-whale/fx'
 
 export interface CommerceKPIResult extends KPIResult {
   source: 'shopify' | 'triple_whale'
@@ -55,6 +56,8 @@ async function getMetricsFromShopify(
 
   if (ordersError) throw new Error(`Orders query failed: ${ordersError.message}`)
 
+  console.log(`[kpi/shopify] ${brandId} window=${window} start=${start} end=${endWithTime} rows=${orders?.length ?? 0}`)
+
   // Group by date to build daily breakdown
   const dayMap = new Map<string, { revenue: number; orders: number; currency: string }>()
   for (const o of orders ?? []) {
@@ -65,11 +68,33 @@ async function getMetricsFromShopify(
     dayMap.set(date, existing)
   }
 
-  const daily = Array.from(dayMap.entries()).map(([date, d]) => ({
+  const rawDaily = Array.from(dayMap.entries()).map(([date, d]) => ({
     date,
     revenue: Math.round(d.revenue * 100) / 100,
     orders: d.orders,
     source_currency: d.currency,
+  }))
+
+  // FX conversion: convert each day's revenue from source currency to displayCurrency
+  const uniqueSourceCurrencies = [...new Set(rawDaily.map(d => d.source_currency))]
+  const fxMap = new Map<string, Record<string, number>>()
+  const today = new Date().toISOString().slice(0, 10)
+  await Promise.all(uniqueSourceCurrencies.map(async src => {
+    if (src === displayCurrency) {
+      fxMap.set(src, { [displayCurrency]: 1 })
+    } else {
+      try {
+        const fx = await fetchFXRates(src, today, [displayCurrency])
+        fxMap.set(src, fx.rates)
+      } catch {
+        fxMap.set(src, {}) // graceful degradation — returns native amount on FX failure
+      }
+    }
+  }))
+
+  const daily = rawDaily.map(d => ({
+    ...d,
+    revenue: Math.round(convertAmount(d.revenue, d.source_currency, displayCurrency, fxMap.get(d.source_currency) ?? {}) * 100) / 100,
   }))
 
   const revenue = daily.reduce((s, d) => s + d.revenue, 0)
