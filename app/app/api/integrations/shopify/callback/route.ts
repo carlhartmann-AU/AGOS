@@ -73,6 +73,9 @@ export async function GET(req: NextRequest) {
 
     const { access_token, scope } = await tokenRes.json() as { access_token: string; scope: string }
 
+    // Guard: Shopify can return 200 with an empty token (e.g. code already redeemed or expired)
+    if (!access_token) return errorRedirect('token_exchange_failed')
+
     // Fetch basic shop info
     const shopRes = await fetch(`https://${shop}/admin/api/2026-04/shop.json`, {
       headers: { 'X-Shopify-Access-Token': access_token },
