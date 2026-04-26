@@ -51,7 +51,7 @@ async function getMetricsFromShopify(
   // Fetch paid orders in the period
   const { data: orders, error: ordersError } = await supabase
     .from('orders')
-    .select('order_created_at, total_price, currency, customer_id')
+    .select('order_created_at, total_price, currency, customer_id, shopify_customer_id')
     .eq('brand_id', brandId)
     .in('financial_status', PAID_STATUSES)
     .gte('order_created_at', startWithTime)
@@ -105,19 +105,30 @@ async function getMetricsFromShopify(
   const ordersTotal = daily.reduce((s, d) => s + d.orders, 0)
   const aov = ordersTotal > 0 ? revenue / ordersTotal : 0
 
-  // New customers: first order falls within the period
-  const { count: newCustomers } = await supabase
-    .from('customers')
-    .select('id', { count: 'exact', head: true })
-    .eq('brand_id', brandId)
-    .gte('first_order_at', start)
-    .lte('first_order_at', endWithTime)
+  // New vs returning customers — derived from orders.shopify_customer_id so the
+  // result is correct even when customer sync is stale or partially populated.
+  const customerIdsInWindow = Array.from(new Set(
+    (orders ?? [])
+      .map(o => o.shopify_customer_id as string | null)
+      .filter((id): id is string => !!id)
+  ))
 
-  // Returning customers: ordered in period but had prior orders
-  const uniqueCustomerIds = new Set(
-    (orders ?? []).filter(o => o.customer_id).map(o => o.customer_id as string)
-  )
-  const returningCustomers = Math.max(0, uniqueCustomerIds.size - (newCustomers ?? 0))
+  let newCustomers = 0
+  let returningCustomers = 0
+
+  if (customerIdsInWindow.length > 0) {
+    // Which of these customer IDs had ANY order before the window?
+    const { data: priorRows } = await supabase
+      .from('orders')
+      .select('shopify_customer_id')
+      .eq('brand_id', brandId)
+      .lt('order_created_at', startWithTime)
+      .in('shopify_customer_id', customerIdsInWindow)
+
+    const priorIds = new Set((priorRows ?? []).map(o => o.shopify_customer_id as string))
+    newCustomers = customerIdsInWindow.filter(id => !priorIds.has(id)).length
+    returningCustomers = customerIdsInWindow.filter(id => priorIds.has(id)).length
+  }
 
   // Last sync: most recent synced_at from orders
   const { data: latestOrder } = await supabase
