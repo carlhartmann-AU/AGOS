@@ -49,8 +49,19 @@ export async function POST(req: NextRequest) {
   }
 
   try {
-    // Customers first — orders reference them
-    const customerResult = await syncCustomers(supabase, brandId, conn.shop_domain, conn.access_token)
+    // Only sync customers when none exist yet. syncCustomers has no incremental
+    // mode and re-fetches all customers on every run (expensive nested GraphQL),
+    // eating most of the 60s budget and starving the order sync.
+    const { count: existingCustomers } = await supabase
+      .from('customers')
+      .select('id', { count: 'exact', head: true })
+      .eq('brand_id', brandId)
+
+    let customerResult = { customers_synced: 0 }
+    if (!existingCustomers || existingCustomers === 0) {
+      customerResult = await syncCustomers(supabase, brandId, conn.shop_domain, conn.access_token)
+    }
+
     const orderResult = await syncOrders(supabase, brandId, conn.shop_domain, conn.access_token)
 
     return NextResponse.json(
