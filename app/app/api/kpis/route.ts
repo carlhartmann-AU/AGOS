@@ -5,7 +5,7 @@
 // and returns unified KPI metrics. If currency is omitted, uses brand_settings.display_currency.
 
 import { NextRequest, NextResponse } from 'next/server'
-import { createClient } from '@supabase/supabase-js'
+import { createAdminClient } from '@/lib/supabase/admin'
 import { type WindowKey } from '@/lib/triple-whale/kpis'
 import { getCommerceKPIs } from '@/lib/kpi/commerce-metrics'
 
@@ -13,14 +13,6 @@ export const dynamic = 'force-dynamic'
 
 const VALID_WINDOWS: WindowKey[] = ['24h', '7d', '30d', 'mtd']
 const SUPPORTED_CURRENCIES = ['AUD', 'USD', 'GBP', 'EUR']
-
-function admin() {
-  return createClient(
-    process.env.NEXT_PUBLIC_SUPABASE_URL!,
-    process.env.SUPABASE_SERVICE_ROLE_KEY!,
-    { auth: { persistSession: false } }
-  )
-}
 
 export async function GET(req: NextRequest) {
   try {
@@ -45,7 +37,7 @@ export async function GET(req: NextRequest) {
         { status: 400, headers: { 'Cache-Control': 'no-store' } })
     }
 
-    const supabase = admin()
+    const supabase = createAdminClient()
 
     // Resolve display currency: query param > brand default > USD fallback
     let displayCurrency = requestedCurrency

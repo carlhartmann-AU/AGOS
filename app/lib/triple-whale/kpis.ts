@@ -34,8 +34,9 @@ export function resolveWindow(window: WindowKey, now = new Date()): { start: str
 
   switch (window) {
     case '24h': {
-      const yesterday = toYMD(daysAgo(now, 1))
-      return { start: yesterday, end: yesterday, expectedDays: 1 }
+      // Include yesterday + today so today's orders are always visible.
+      const start = toYMD(daysAgo(now, 1))
+      return { start, end, expectedDays: 2 }
     }
     case '7d': {
       const start = toYMD(daysAgo(now, 6))

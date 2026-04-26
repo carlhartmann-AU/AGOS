@@ -44,7 +44,7 @@ async function getMetricsFromShopify(
   const endWithTime = end + 'T23:59:59Z'
 
   // Fetch paid orders in the period
-  const { data: orders } = await supabase
+  const { data: orders, error: ordersError } = await supabase
     .from('orders')
     .select('order_created_at, total_price, currency, customer_id')
     .eq('brand_id', brandId)
@@ -52,6 +52,8 @@ async function getMetricsFromShopify(
     .gte('order_created_at', start)
     .lte('order_created_at', endWithTime)
     .order('order_created_at', { ascending: true })
+
+  if (ordersError) throw new Error(`Orders query failed: ${ordersError.message}`)
 
   // Group by date to build daily breakdown
   const dayMap = new Map<string, { revenue: number; orders: number; currency: string }>()
