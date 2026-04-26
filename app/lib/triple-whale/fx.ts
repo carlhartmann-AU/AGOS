@@ -4,7 +4,7 @@
 // - Uses ECB daily rates (published ~16:00 CET on working days)
 // - Rate limited but no caps
 
-const FRANKFURTER_BASE = 'https://api.frankfurter.dev/v2'
+const FRANKFURTER_BASE = 'https://api.frankfurter.dev/v1'
 
 export interface FXRates {
   base: string                // e.g. 'GBP'
@@ -29,15 +29,15 @@ export async function fetchFXRates(
 ): Promise<FXRates> {
   // Frankfurter doesn't return base in the quotes; we need to add it manually.
   const quotesList = Array.from(new Set(quotes.filter(q => q !== baseCurrency)))
-  const url = `${FRANKFURTER_BASE}/rates?date=${date}&base=${baseCurrency}&quotes=${quotesList.join(',')}`
+  // v1 URL: /{date}?from={base}&to={EUR,AUD,...}  →  { amount, base, date, rates: { EUR: X, ... } }
+  const url = `${FRANKFURTER_BASE}/${date}?from=${baseCurrency}&to=${quotesList.join(',')}`
 
   const res = await fetch(url)
   if (!res.ok) {
     throw new Error(`Frankfurter FX fetch failed ${res.status}: ${await res.text()}`)
   }
 
-  const data = await res.json()
-  // Frankfurter v2 response shape: { base, date, rates: { QUOTE: number, ... } }
+  const data = await res.json() as { base?: string; date?: string; rates?: Record<string, number> }
   const rates = { ...(data.rates ?? {}), [baseCurrency]: 1 }
 
   return {

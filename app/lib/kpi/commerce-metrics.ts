@@ -26,6 +26,8 @@ export async function getCommerceKPIs(
 ): Promise<CommerceKPIResult> {
   const dataSource = await getDataSource(brandId, 'commerce_data')
 
+  console.log(`[kpi-src] ${brandId} ${window}: ${dataSource?.integration_slug ?? 'null (→ TW)'}`)
+
   if (dataSource?.integration_slug === 'shopify') {
     return getMetricsFromShopify(supabase, brandId, window, displayCurrency)
   }
@@ -42,6 +44,8 @@ async function getMetricsFromShopify(
   displayCurrency: string,
 ): Promise<CommerceKPIResult> {
   const { start, end, expectedDays } = resolveWindow(window)
+  // Explicit UTC timestamps — avoids timezone-dependent date casting in PostgREST
+  const startWithTime = start + 'T00:00:00Z'
   const endWithTime = end + 'T23:59:59Z'
 
   // Fetch paid orders in the period
@@ -50,13 +54,13 @@ async function getMetricsFromShopify(
     .select('order_created_at, total_price, currency, customer_id')
     .eq('brand_id', brandId)
     .in('financial_status', PAID_STATUSES)
-    .gte('order_created_at', start)
+    .gte('order_created_at', startWithTime)
     .lte('order_created_at', endWithTime)
     .order('order_created_at', { ascending: true })
 
   if (ordersError) throw new Error(`Orders query failed: ${ordersError.message}`)
 
-  console.log(`[kpi/shopify] ${brandId} window=${window} start=${start} end=${endWithTime} rows=${orders?.length ?? 0}`)
+  console.log(`[kpi-rows] ${window} ${orders?.length ?? 0}`)
 
   // Group by date to build daily breakdown
   const dayMap = new Map<string, { revenue: number; orders: number; currency: string }>()
