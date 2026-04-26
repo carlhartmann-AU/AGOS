@@ -19,7 +19,6 @@ export async function GET(req: NextRequest) {
     .from('shopify_connections')
     .select('shop_domain, shop_name, sync_status, sync_error, connected_at, last_sync_at, access_token')
     .eq('brand_id', brand_id)
-    .neq('sync_status', 'disconnected')
     .order('connected_at', { ascending: false })
     .limit(1)
     .maybeSingle()
