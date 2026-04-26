@@ -137,10 +137,12 @@ export async function syncOrders(
     (customerRows ?? []).map(c => [c.shopify_customer_id, c.id])
   )
 
-  // Fetch all matching orders with pagination
-  const allOrders: ShopifyOrder[] = []
+  // Fetch pages and upsert each page immediately — avoids accumulating all orders
+  // in memory before writing, so partial progress is saved even if the request times out.
+  // On the next run, existingOrderCount > 0 triggers incremental mode (much faster).
   let cursor: string | null = null
   let hasNextPage = true
+  let ordersUpserted = 0
 
   while (hasNextPage) {
     const result: import('./client').ShopifyGraphQLResponse<OrdersQueryResponse> = await shopifyGraphQL<OrdersQueryResponse>(
@@ -155,47 +157,45 @@ export async function syncOrders(
     }
 
     const page = result.data!.orders
-    allOrders.push(...page.nodes)
     hasNextPage = page.pageInfo.hasNextPage
     cursor = page.pageInfo.endCursor
-  }
 
-  // Build all rows first, then batch-upsert in chunks of 100
-  const rows = allOrders.map(order => {
-    const shopifyCustomerId = order.customer?.id ?? null
-    return {
-      brand_id: brandId,
-      shopify_order_id: order.id,
-      shopify_order_number: order.name,
-      email: order.email,
-      financial_status: order.financialStatus.toLowerCase(),
-      fulfillment_status: order.fulfillmentStatus?.toLowerCase() ?? null,
-      currency: order.currencyCode,
-      total_price: money(order.totalPriceSet),
-      subtotal_price: money(order.subtotalPriceSet),
-      total_tax: money(order.totalTaxSet),
-      total_discounts: money(order.totalDiscountsSet),
-      total_shipping: money(order.totalShippingPriceSet),
-      total_refunded: money(order.totalRefundedSet),
-      line_item_count: order.lineItems.totalCount,
-      source_name: order.sourceName,
-      tags: order.tags,
-      customer_id: shopifyCustomerId ? (customerMap.get(shopifyCustomerId) ?? null) : null,
-      shopify_customer_id: shopifyCustomerId,
-      order_created_at: order.processedAt,
-      order_updated_at: order.updatedAt,
-      synced_at: syncStart,
-      updated_at: syncStart,
-    }
-  })
+    if (page.nodes.length === 0) continue
 
-  const CHUNK = 100
-  for (let i = 0; i < rows.length; i += CHUNK) {
+    const rows = page.nodes.map(order => {
+      const shopifyCustomerId = order.customer?.id ?? null
+      return {
+        brand_id: brandId,
+        shopify_order_id: order.id,
+        shopify_order_number: order.name,
+        email: order.email,
+        financial_status: order.financialStatus.toLowerCase(),
+        fulfillment_status: order.fulfillmentStatus?.toLowerCase() ?? null,
+        currency: order.currencyCode,
+        total_price: money(order.totalPriceSet),
+        subtotal_price: money(order.subtotalPriceSet),
+        total_tax: money(order.totalTaxSet),
+        total_discounts: money(order.totalDiscountsSet),
+        total_shipping: money(order.totalShippingPriceSet),
+        total_refunded: money(order.totalRefundedSet),
+        line_item_count: order.lineItems.totalCount,
+        source_name: order.sourceName,
+        tags: order.tags,
+        customer_id: shopifyCustomerId ? (customerMap.get(shopifyCustomerId) ?? null) : null,
+        shopify_customer_id: shopifyCustomerId,
+        order_created_at: order.processedAt,
+        order_updated_at: order.updatedAt,
+        synced_at: syncStart,
+        updated_at: syncStart,
+      }
+    })
+
     const { error } = await supabase
       .from('orders')
-      .upsert(rows.slice(i, i + CHUNK), { onConflict: 'brand_id,shopify_order_id' })
+      .upsert(rows, { onConflict: 'brand_id,shopify_order_id' })
     if (error) throw new Error(`Order upsert failed: ${error.message}`)
+    ordersUpserted += rows.length
   }
 
-  return { orders_synced: rows.length, is_full_backfill: isFullBackfill }
+  return { orders_synced: ordersUpserted, is_full_backfill: isFullBackfill }
 }
