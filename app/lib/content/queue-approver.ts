@@ -11,6 +11,13 @@ import { createBlogArticle, updateBlogArticle } from '@/lib/shopify/publish-blog
 import { fireN8nPublishWebhook } from './n8n-webhook'
 import type { BlogPublishInput } from '@/lib/shopify/publish-blog'
 
+export class ShopifyPublishError extends Error {
+  constructor(message: string, options?: { cause?: unknown }) {
+    super(message, options)
+    this.name = 'ShopifyPublishError'
+  }
+}
+
 export type ApproveAction = 'draft' | 'go_live' | 'reject' | 'pull_back' | 'publish_pending'
 
 // State machine — (from_status, action) → to_status
@@ -78,7 +85,37 @@ export async function transitionContentStatus(input: {
     updates.approved_at = null
   }
 
-  // 4. UPDATE
+  // 4. Blog draft/go_live: Shopify publish runs BEFORE DB status update.
+  //    On failure, status never transitions and the error surfaces to the caller.
+  let shopify_resource_id: string | undefined
+  const isBlogShopifyAction = current.content_type === 'blog' && (action === 'draft' || action === 'go_live')
+
+  if (isBlogShopifyAction) {
+    try {
+      shopify_resource_id = await tryShopifyPublish(supabase, content_id, brand_id, current, action as 'draft' | 'go_live')
+    } catch (err) {
+      if (err instanceof ShopifyPublishError) {
+        try {
+          await supabase.from('audit_log').insert({
+            brand_id,
+            agent: 'content_studio',
+            action: `content_${action}_failed`,
+            tokens_in: 0,
+            tokens_out: 0,
+            status: 'failure',
+            input_summary: `from=${fromStatus} action=${action} content_type=${current.content_type} actor=${actor_email}`.slice(0, 500),
+            output_summary: '',
+            error_message: (err as Error).message.slice(0, 500),
+          })
+        } catch (auditErr) {
+          console.warn('[queue-approver] failure audit_log write failed (non-fatal):', auditErr)
+        }
+      }
+      throw err
+    }
+  }
+
+  // 5. UPDATE — only reached if Shopify publish succeeded (or action doesn't require it)
   const { data: updated, error: updateError } = await supabase
     .from('content_queue')
     .update(updates)
@@ -99,29 +136,17 @@ export async function transitionContentStatus(input: {
     throw err
   }
 
-  let shopify_resource_id: string | undefined
-
-  // 5. Post-transition side effects
-  if (action === 'go_live' && current.content_type === 'blog') {
-    shopify_resource_id = await tryShopifyPublish(supabase, content_id, brand_id, current, 'go_live')
-    if (!shopify_resource_id) {
-      // Fall back to n8n
-      await fireN8nPublishWebhook({ content_id, brand_id, platform: current.platform ?? null })
-    }
-  }
-
-  if (action === 'draft' && current.content_type === 'blog') {
-    shopify_resource_id = await tryShopifyPublish(supabase, content_id, brand_id, current, 'draft')
-    if (!shopify_resource_id) {
-      await fireN8nPublishWebhook({ content_id, brand_id, platform: current.platform ?? null })
-    }
-  }
-
-  if (action === 'publish_pending') {
+  // 6. publish_pending → n8n (email only; DotDigital is the only legitimate n8n target)
+  if (action === 'publish_pending' && current.content_type === 'email') {
     await fireN8nPublishWebhook({ content_id, brand_id, platform: current.platform ?? null })
   }
+  // TODO(Item 12): Per-brand × per-content-type platform routing
+  // will replace this hardcoded 'email' guard. Currently restricted
+  // to email because that's the only legitimate n8n use case
+  // (DotDigital). Other content_types reaching publish_pending is
+  // a state machine misuse, prevented at the dashboard layer.
 
-  // 6. Audit log — non-throwing
+  // 7. Audit log — non-throwing
   try {
     await supabase.from('audit_log').insert({
       brand_id,
@@ -140,14 +165,14 @@ export async function transitionContentStatus(input: {
   return { success: true, status: toStatus, shopify_resource_id }
 }
 
-// Direct Shopify publish — no HTTP hop. Returns shopify_resource_id on success, undefined on failure.
+// Direct Shopify publish. Throws ShopifyPublishError on any failure — no silent fallback.
 async function tryShopifyPublish(
   supabase: ReturnType<typeof createAdminClient>,
   content_id: string,
   brand_id: string,
   queueRow: Record<string, unknown>,
   action: 'draft' | 'go_live',
-): Promise<string | undefined> {
+): Promise<string> {
   try {
     const { data: conn } = await supabase
       .from('shopify_connections')
@@ -159,12 +184,13 @@ async function tryShopifyPublish(
       .limit(1)
       .maybeSingle()
 
-    if (!conn) return undefined
+    if (!conn) {
+      throw new ShopifyPublishError('No active Shopify connection found for this brand')
+    }
 
     const scopes = (conn.scopes ?? '').split(',').map((s: string) => s.trim())
     if (!scopes.includes('write_content')) {
-      console.log('[queue-approver] write_content scope missing — skipping direct publish, falling back to n8n')
-      return undefined
+      throw new ShopifyPublishError('Shopify connection is missing write_content scope — reconnect via Settings → Integrations')
     }
 
     const content = (queueRow.content ?? {}) as Record<string, unknown>
@@ -205,7 +231,11 @@ async function tryShopifyPublish(
 
     return publishResult.shopify_article_id
   } catch (err) {
-    console.warn('[queue-approver] Direct Shopify publish failed, will fall back to n8n:', err)
-    return undefined
+    if (err instanceof ShopifyPublishError) throw err
+    console.error('[queue-approver] Direct Shopify publish failed:', err)
+    throw new ShopifyPublishError(
+      err instanceof Error ? err.message : 'Shopify publish failed',
+      { cause: err }
+    )
   }
 }

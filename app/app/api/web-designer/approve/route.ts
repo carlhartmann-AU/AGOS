@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { createClient } from '@/lib/supabase/server'
-import { transitionContentStatus } from '@/lib/content/queue-approver'
+import { transitionContentStatus, ShopifyPublishError } from '@/lib/content/queue-approver'
 import type { ApproveAction } from '@/lib/content/queue-approver'
 
 export async function POST(request: NextRequest) {
@@ -35,6 +35,12 @@ export async function POST(request: NextRequest) {
     })
     return NextResponse.json({ ok: true, action, status: result.status, shopify_resource_id: result.shopify_resource_id ?? null })
   } catch (err: unknown) {
+    if (err instanceof ShopifyPublishError) {
+      return NextResponse.json(
+        { error: 'Shopify publish failed', detail: (err as Error).message, retry_safe: true },
+        { status: 502, headers: { 'Cache-Control': 'no-store' } },
+      )
+    }
     const e = err as Error & { code?: number; current_status?: string }
     if (e.code === 404) {
       return NextResponse.json({ error: e.message }, { status: 404 })

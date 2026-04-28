@@ -1,6 +1,7 @@
 'use client'
 
 import { useEffect, useState } from 'react'
+import Link from 'next/link'
 import { createClient } from '@/lib/supabase/client'
 import { useBrand } from '@/context/BrandContext'
 import { ContentApprovalCard } from '@/components/ContentApprovalCard'
@@ -8,6 +9,15 @@ import { PublishConfirmCard } from '@/components/PublishConfirmCard'
 import { PublishingCard, EscalatedCard } from '@/components/approval-cards'
 import { CardErrorBoundary } from './CardErrorBoundary'
 import type { ContentQueueItem } from '@/types'
+
+function formatRelTime(date: string): string {
+  const diff = Date.now() - new Date(date).getTime()
+  const minutes = Math.floor(diff / 60000)
+  if (minutes < 60) return `${minutes}m ago`
+  const hours = Math.floor(minutes / 60)
+  if (hours < 24) return `${hours}h ago`
+  return `${Math.floor(hours / 24)}d ago`
+}
 
 // Active states fetched and rendered. Terminal states (published, rejected) are
 // excluded — they belong in a future history view.
@@ -130,7 +140,8 @@ export default function ContentApprovalsPage() {
     })
     if (!res.ok) {
       const body = await res.json().catch(() => ({})) as Record<string, unknown>
-      const msg = (body.error as string) ?? `Approve failed: ${res.status}`
+      const detail = body.detail as string | undefined
+      const msg = detail ? `${body.error as string}: ${detail}` : ((body.error as string) ?? `Approve failed: ${res.status}`)
       setActionError(msg)
       throw new Error(msg)
     }
@@ -160,7 +171,8 @@ export default function ContentApprovalsPage() {
     })
     if (!res.ok) {
       const body = await res.json().catch(() => ({})) as Record<string, unknown>
-      const msg = (body.error as string) ?? `Publish failed: ${res.status}`
+      const detail = body.detail as string | undefined
+      const msg = detail ? `${body.error as string}: ${detail}` : ((body.error as string) ?? `Publish failed: ${res.status}`)
       setActionError(msg)
       throw new Error(msg)
     }
@@ -184,6 +196,38 @@ export default function ContentApprovalsPage() {
   // ── Per-item card renderer — switch on status ─────────────────────────────
 
   function renderCard(item: ContentQueueItem) {
+    // Blog articles are approved and published via /approvals/web-designer/.
+    // Render a redirect affordance so the user always ends up at the right surface.
+    if (item.content_type === 'blog') {
+      const content = (item.content ?? {}) as Record<string, unknown>
+      const title = (content.title ?? content.subject ?? '(untitled)') as string
+      return (
+        <CardErrorBoundary key={item.id} contentId={item.id}>
+          <Link href="/approvals/web-designer/" className="block group">
+            <div className="bg-white rounded-lg border border-gray-200 group-hover:border-cyan-300 overflow-hidden transition-colors cursor-pointer">
+              <div className="px-5 py-4 flex items-start justify-between gap-4">
+                <div className="flex items-center gap-2 flex-wrap">
+                  <span className="text-xs font-medium bg-gray-100 text-gray-600 px-2 py-0.5 rounded">
+                    Blog Post
+                  </span>
+                  <span className="inline-flex items-center gap-1 text-xs font-medium bg-cyan-50 text-cyan-700 px-2 py-0.5 rounded border border-cyan-200">
+                    ↗ Open in Web Designer
+                  </span>
+                </div>
+                <span className="text-xs text-gray-400 whitespace-nowrap flex-shrink-0">
+                  {formatRelTime(item.updated_at)}
+                </span>
+              </div>
+              <div className="px-5 pb-4">
+                <p className="text-sm font-medium text-gray-900 mb-1">{title}</p>
+                <p className="text-xs text-gray-400">Blog posts are approved via the Web Designer queue</p>
+              </div>
+            </div>
+          </Link>
+        </CardErrorBoundary>
+      )
+    }
+
     const status = item.status as ActiveStatus
 
     switch (status) {

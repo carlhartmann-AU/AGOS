@@ -598,7 +598,8 @@ export function WebDesignerDashboard() {
     })
     if (!res.ok) {
       const body = await res.json().catch(() => ({}))
-      throw new Error(body.error ?? `Request failed: ${res.status}`)
+      const detail = body.detail as string | undefined
+      throw new Error(detail ? `${body.error}: ${detail}` : (body.error ?? `Request failed: ${res.status}`))
     }
   }
 
