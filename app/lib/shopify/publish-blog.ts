@@ -15,8 +15,8 @@ query GetBlogs {
 `
 
 const ARTICLE_CREATE_MUTATION = `
-mutation ArticleCreate($blogId: ID!, $article: ArticleCreateInput!) {
-  articleCreate(blogId: $blogId, article: $article) {
+mutation ArticleCreate($article: ArticleCreateInput!) {
+  articleCreate(article: $article) {
     article {
       id
       title
@@ -120,14 +120,14 @@ export async function createBlogArticle(
   input: BlogPublishInput,
 ): Promise<BlogPublishResult> {
   const { id: blogId, handle: blogHandle } = await getBlog(shopDomain, accessToken)
-  const article = buildArticleInput(input)
+  const article = { ...buildArticleInput(input), blogId }
 
   const result = await shopifyGraphQL<{
     articleCreate: {
       article: ArticleResponse
       userErrors: Array<ArticleUserError>
     }
-  }>(shopDomain, accessToken, ARTICLE_CREATE_MUTATION, { blogId, article })
+  }>(shopDomain, accessToken, ARTICLE_CREATE_MUTATION, { article })
 
   const errors = result.data?.articleCreate?.userErrors ?? []
   if (errors.length) throw new Error(`Shopify articleCreate failed: ${errors.map(e => e.message).join(', ')}`)
