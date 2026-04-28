@@ -677,7 +677,7 @@ export function ContentStudio({ brandId = 'plasmaide' }: { brandId?: string }) {
           {successId && (
             <div className="bg-green-50 border border-green-200 rounded-lg px-4 py-3 text-sm text-green-700">
               Content generated and added to the approval queue.{' '}
-              <a href="/approvals/web-designer" className="font-medium underline">
+              <a href="/approvals" className="font-medium underline">
                 Review it now →
               </a>
             </div>

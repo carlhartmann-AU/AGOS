@@ -6,6 +6,7 @@ import { createClient } from '@/lib/supabase/server'
 import { createAdminClient } from '@/lib/supabase/admin'
 import { transitionContentStatus } from '@/lib/content/queue-approver'
 
+export const maxDuration = 60
 export const dynamic = 'force-dynamic'
 
 export async function POST(request: NextRequest) {

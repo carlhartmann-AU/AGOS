@@ -49,7 +49,7 @@ const NAV_ITEMS: NavItem[] = [
   { key: 'dashboard',      href: '/dashboard',       label: 'Dashboard',       icon: 'dash' },
   { key: 'content-studio', href: '/content-studio',  label: 'Content Studio',  icon: 'studio', roles: ['admin', 'approver'] },
   { key: 'products',       href: '/products',        label: 'Products',        icon: 'products' },
-  { key: 'approvals',      href: '/approvals/content', label: 'Approvals',     icon: 'approve' },
+  { key: 'approvals',      href: '/approvals',         label: 'Approvals',     icon: 'approve' },
   { key: 'financial',      href: '/financial',        label: 'Financial',       icon: 'fin' },
   { key: 'performance',    href: '/performance',     label: 'Performance',     icon: 'perf' },
   { key: 'coo',            href: '/coo',             label: 'COO Interface',   icon: 'coo',  roles: ['admin'] },

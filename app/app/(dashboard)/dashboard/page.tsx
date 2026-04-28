@@ -401,7 +401,7 @@ export default function DashboardPage() {
       <div style={{ marginBottom: 20 }}>
         <div className="section-head">
           <h2>Content pipeline <span className="desc">· last 30 days</span></h2>
-          <Link href="/approvals/content" className="btn ghost">View all</Link>
+          <Link href="/approvals" className="btn ghost">View all</Link>
         </div>
         <div className="stat-row mb-12">
           <StatCell label="Generated"     value={content ? fmtInt(content.total) : '—'}              sub="all time"                    loading={loading} />
@@ -416,7 +416,7 @@ export default function DashboardPage() {
         <div className="card">
           <div className="card-head">
             <h3>Recent content</h3>
-            <Link href="/approvals/content" className="btn ghost" style={{ fontSize: 11 }}>View all →</Link>
+            <Link href="/approvals" className="btn ghost" style={{ fontSize: 11 }}>View all →</Link>
           </div>
           {loading ? (
             <div className="card-body" style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
@@ -438,7 +438,7 @@ export default function DashboardPage() {
               {recent.map((item) => (
                 <Link
                   key={item.id}
-                  href="/approvals/content"
+                  href="/approvals"
                   style={{ display: 'grid', gridTemplateColumns: '18px 1fr auto auto', gap: 10, alignItems: 'center', padding: 'var(--cell-pad)', borderBottom: '1px solid var(--line-2)', cursor: 'pointer', transition: 'background 120ms' }}
                   onMouseEnter={e => { (e.currentTarget as HTMLElement).style.background = 'var(--panel-2)' }}
                   onMouseLeave={e => { (e.currentTarget as HTMLElement).style.background = '' }}
