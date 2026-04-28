@@ -3,6 +3,7 @@ import { createAdminClient } from '@/lib/supabase/admin'
 import { generateOutreachCopy } from '@/lib/agents/b2b/engine'
 import { getAgentConfig } from '@/lib/llm/provider'
 
+export const maxDuration = 300
 export const dynamic = 'force-dynamic'
 
 export async function POST(req: NextRequest) {

@@ -210,16 +210,19 @@ export function ContentApprovalCard({ item, onApprove, onReject, onEdit }: Props
   const [actionLoading, setActionLoading] = useState<'approve' | 'reject' | null>(null)
   const [error, setError] = useState<string | null>(null)
 
-  const content = item.content as Record<string, string>
+  const content = (item.content ?? {}) as Record<string, unknown>
 
-  const bodyPreview = content.body_plain
-    ? content.body_plain.slice(0, 300)
-    : content.body_html
-    ? stripHtml(content.body_html).slice(0, 300)
-    : null
-  const bodyTruncated =
-    (content.body_plain?.length ?? 0) > 300 ||
-    (content.body_html ? stripHtml(content.body_html).length > 300 : false)
+  const rawBody = (
+    content.body_plain ??
+    content.body_html ??
+    content.summary ??
+    content.summary_html ??
+    content.caption ??
+    ''
+  ) as string
+  const previewFull = rawBody.startsWith('<') ? stripHtml(rawBody) : rawBody
+  const bodyPreview = previewFull ? previewFull.slice(0, 300) : null
+  const bodyTruncated = previewFull.length > 300
 
   async function handleApprove() {
     setActionLoading('approve')
@@ -270,11 +273,11 @@ export function ContentApprovalCard({ item, onApprove, onReject, onEdit }: Props
 
       {/* Content preview */}
       <div className="px-5 pb-4">
-        {content.subject && (
-          <p className="text-sm font-medium text-gray-900 mb-1">{content.subject}</p>
+        {!!content.subject && (
+          <p className="text-sm font-medium text-gray-900 mb-1">{content.subject as string}</p>
         )}
-        {content.title && !content.subject && (
-          <p className="text-sm font-medium text-gray-900 mb-1">{content.title}</p>
+        {!!content.title && !content.subject && (
+          <p className="text-sm font-medium text-gray-900 mb-1">{content.title as string}</p>
         )}
         {bodyPreview ? (
           <p className="text-sm text-gray-600 leading-relaxed line-clamp-4">

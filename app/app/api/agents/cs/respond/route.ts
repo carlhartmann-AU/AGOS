@@ -3,6 +3,7 @@ import { generateTicketResponse } from '@/lib/agents/cs/engine'
 import { createAdminClient } from '@/lib/supabase/admin'
 import { getAgentConfig } from '@/lib/llm/provider'
 
+export const maxDuration = 60
 export const dynamic = 'force-dynamic'
 
 export async function POST(req: NextRequest) {

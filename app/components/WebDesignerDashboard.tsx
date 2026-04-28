@@ -594,7 +594,7 @@ export function WebDesignerDashboard() {
     const res = await fetch('/api/web-designer/approve', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ content_queue_id: queueId, action, brand_id: brandId }),
+      body: JSON.stringify({ id: queueId, action, brand_id: brandId }),
     })
     if (!res.ok) {
       const body = await res.json().catch(() => ({}))

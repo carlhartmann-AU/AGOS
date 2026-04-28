@@ -33,6 +33,11 @@ import Anthropic from '@anthropic-ai/sdk'
 import { createAdminClient } from '@/lib/supabase/admin'
 import { getAgentConfig } from '@/lib/llm/provider'
 import { CONTENT_STRATEGY_PROMPT, COMPLIANCE_PROMPT } from '@/lib/agents/prompts'
+import { writeContentToQueue } from '@/lib/content/queue-writer'
+import { maxTokensForContentType } from '@/lib/content/token-budgets'
+
+export const maxDuration = 300
+export const dynamic = 'force-dynamic'
 
 // ─── Types ────────────────────────────────────────────────────────────────────
 
@@ -155,9 +160,10 @@ async function callContentStrategy(
     ? `Brand: ${brandId}\n\nBrief:\n${JSON.stringify(brief, null, 2)}\n\nThe previous version of this content failed compliance. Fix ALL of these violations before generating new content:\n${JSON.stringify(violations, null, 2)}`
     : `Brand: ${brandId}\n\nBrief:\n${JSON.stringify(brief, null, 2)}`
 
+  const maxTokens = maxTokensForContentType(brief.type)
   const response = await anthropic.messages.create({
     model,
-    max_tokens: 4096,
+    max_tokens: maxTokens,
     system: [
       {
         type: 'text',
@@ -169,12 +175,16 @@ async function callContentStrategy(
   })
 
   const text = response.content[0].type === 'text' ? response.content[0].text : ''
+
+  if (response.stop_reason === 'max_tokens') {
+    throw new Error(`Content generation truncated at max_tokens (budget=${maxTokens}, type=${brief.type})`)
+  }
+
   const stripped = stripFences(text)
   try {
     const output = JSON.parse(stripped) as ContentStrategyOutput
     return { output, usage: response.usage }
   } catch (parseErr) {
-    // Surface the raw response so we can see what Claude returned
     const preview = stripped.slice(0, 500)
     throw new Error(`JSON parse failed: ${(parseErr as Error).message} — raw preview: ${preview}`)
   }
@@ -209,32 +219,6 @@ async function callCompliance(
 }
 
 // ─── Database helpers ─────────────────────────────────────────────────────────
-
-async function insertQueueItem(
-  supabase: ReturnType<typeof createAdminClient>,
-  brandId: string,
-  brief: ContentBrief,
-  piece: ContentPiece,
-  complianceResult: ComplianceOutput,
-  status: 'pending' | 'escalated',
-) {
-  const { data, error } = await supabase
-    .from('content_queue')
-    .insert({
-      brand_id: brandId,
-      content_type: piece.type,
-      status,
-      content: piece,
-      compliance_result: complianceResult,
-      platform: brief.platform ?? null,
-      audience: piece.audience ?? null,
-    })
-    .select('id, status')
-    .single()
-
-  if (error) throw new Error(`Queue insert failed: ${error.message}`)
-  return data as { id: string; status: string }
-}
 
 async function insertAuditLog(
   supabase: ReturnType<typeof createAdminClient>,
@@ -294,7 +278,16 @@ async function runPieceThroughCompliance(
 
   if (comp.result === 'PASS' || comp.result === 'ESCALATE') {
     const status = comp.result === 'PASS' ? 'pending' : 'escalated'
-    const row = await insertQueueItem(supabase, brandId, brief, piece, comp, status)
+    const queueResult = await writeContentToQueue({
+      brand_id: brandId,
+      content_type: piece.type,
+      content: { ...piece, compliance_result: comp, status },
+      platform: brief.platform ?? null,
+      audience: piece.audience ?? null,
+      source: 'agent_strategy',
+      runComplianceSync: false,
+    })
+    const row = { id: queueResult.content_id, status }
 
     // Log compliance agent call
     await insertAuditLog(
@@ -498,7 +491,16 @@ export async function POST(req: NextRequest) {
             escalation_reason: `Exceeded ${MAX_COMPLIANCE_ATTEMPTS} compliance attempts. Last attempt had ${violations.length} violation(s).`,
           }
 
-          const row = await insertQueueItem(supabase, brand_id, brief, state.piece, escalatedComp, 'escalated')
+          const escalatedQueue = await writeContentToQueue({
+            brand_id,
+            content_type: state.piece.type,
+            content: { ...state.piece, compliance_result: escalatedComp, status: 'escalated' },
+            platform: brief.platform ?? null,
+            audience: state.piece.audience ?? null,
+            source: 'agent_strategy',
+            runComplianceSync: false,
+          })
+          const row = { id: escalatedQueue.content_id, status: 'escalated' }
 
           await insertAuditLog(
             supabase,

@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from 'next/server'
 import { createAdminClient } from '@/lib/supabase/admin'
 import { generateReviewResponse } from '@/lib/agents/reviews/engine'
 
+export const maxDuration = 60
 export const dynamic = 'force-dynamic'
 
 export async function POST(req: NextRequest) {

@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from 'next/server'
 import { createAdminClient } from '@/lib/supabase/admin'
 import { generateProspectResearch } from '@/lib/agents/b2b/engine'
 
+export const maxDuration = 300
 export const dynamic = 'force-dynamic'
 
 export async function POST(req: NextRequest) {

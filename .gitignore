@@ -42,3 +42,7 @@ n8n-creds/
 
 # Supabase local
 supabase/.temp/
+
+# Test suite
+tests/.env.test
+tests/results/*.log

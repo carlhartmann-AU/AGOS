@@ -24,7 +24,8 @@ export function PublishConfirmCard({ item, onConfirm, onCancel }: Props) {
   const [actionLoading, setActionLoading] = useState<'confirm' | 'cancel' | null>(null)
   const [error, setError] = useState<string | null>(null)
 
-  const content = item.content as Record<string, string>
+  const content = (item.content ?? {}) as Record<string, unknown>
+  const title = (content.title ?? content.subject ?? '(untitled)') as string
 
   async function handleConfirm() {
     setActionLoading('confirm')
@@ -74,9 +75,7 @@ export function PublishConfirmCard({ item, onConfirm, onCancel }: Props) {
             </span>
           )}
         </div>
-        {content.subject && (
-          <p className="text-sm font-medium text-gray-900 mb-1">{content.subject}</p>
-        )}
+        <p className="text-sm font-medium text-gray-900 mb-2">{title}</p>
         <p className="text-sm text-gray-500">
           Confirming will set status to{' '}
           <span className="font-mono text-xs bg-gray-100 px-1 py-0.5 rounded">

@@ -5,7 +5,24 @@ import { createClient } from '@/lib/supabase/client'
 import { useBrand } from '@/context/BrandContext'
 import { ContentApprovalCard } from '@/components/ContentApprovalCard'
 import { PublishConfirmCard } from '@/components/PublishConfirmCard'
+import { PublishingCard, EscalatedCard } from '@/components/approval-cards'
+import { CardErrorBoundary } from './CardErrorBoundary'
 import type { ContentQueueItem } from '@/types'
+
+// Active states fetched and rendered. Terminal states (published, rejected) are
+// excluded — they belong in a future history view.
+const ACTIVE_STATUSES = [
+  'pending',
+  'approved',
+  'publish_pending',
+  'escalated',
+] as const
+
+type ActiveStatus = typeof ACTIVE_STATUSES[number]
+
+function isActiveStatus(status: string): status is ActiveStatus {
+  return (ACTIVE_STATUSES as readonly string[]).includes(status)
+}
 
 function SkeletonCard() {
   return (
@@ -27,12 +44,11 @@ export default function ContentApprovalsPage() {
   const { activeBrand } = useBrand()
   const supabase = createClient()
 
-  const [pendingItems, setPendingItems] = useState<ContentQueueItem[]>([])
-  const [confirmingItems, setConfirmingItems] = useState<ContentQueueItem[]>([])
+  const [items, setItems] = useState<ContentQueueItem[]>([])
   const [loading, setLoading] = useState(true)
   const [fetchError, setFetchError] = useState<string | null>(null)
+  const [actionError, setActionError] = useState<string | null>(null)
 
-  // Fetch pending items and subscribe to real-time changes
   useEffect(() => {
     if (!activeBrand) {
       setLoading(false)
@@ -40,31 +56,29 @@ export default function ContentApprovalsPage() {
     }
 
     const brandId = activeBrand.brand_id
-
-    // Reset confirming items when brand changes
-    setConfirmingItems([])
+    setItems([])
     setLoading(true)
     setFetchError(null)
 
-    // Initial fetch
+    // Initial fetch — all active states in a single query
     supabase
       .from('content_queue')
       .select('*')
       .eq('brand_id', brandId)
-      .eq('status', 'pending')
-      .order('created_at', { ascending: false })
+      .in('status', [...ACTIVE_STATUSES])
+      .order('updated_at', { ascending: false })
       .then(({ data, error }) => {
         if (error) {
           setFetchError(error.message)
         } else {
-          setPendingItems(data ?? [])
+          setItems((data as ContentQueueItem[]) ?? [])
         }
         setLoading(false)
       })
 
-    // Real-time subscription — filter by brand_id, manage status client-side
+    // Real-time subscription — DB is the single source of truth
     const channel = supabase
-      .channel(`content_queue:${brandId}`)
+      .channel(`content_queue_active:${brandId}`)
       .on(
         'postgres_changes',
         {
@@ -76,22 +90,24 @@ export default function ContentApprovalsPage() {
         (payload) => {
           if (payload.eventType === 'INSERT') {
             const item = payload.new as ContentQueueItem
-            if (item.status === 'pending') {
-              setPendingItems((prev) => [item, ...prev])
+            if (isActiveStatus(item.status)) {
+              setItems((prev) => [item, ...prev])
             }
           } else if (payload.eventType === 'UPDATE') {
             const item = payload.new as ContentQueueItem
-            if (item.status !== 'pending') {
-              // Remove from pending list — could have been actioned externally
-              setPendingItems((prev) => prev.filter((p) => p.id !== item.id))
-            } else {
-              // Update the item in-place if still pending
-              setPendingItems((prev) =>
-                prev.map((p) => (p.id === item.id ? item : p))
+            if (isActiveStatus(item.status)) {
+              // Row is still active — replace in place
+              setItems((prev) =>
+                prev.some((p) => p.id === item.id)
+                  ? prev.map((p) => (p.id === item.id ? item : p))
+                  : [item, ...prev]
               )
+            } else {
+              // Row moved to a terminal state (published / rejected) — remove
+              setItems((prev) => prev.filter((p) => p.id !== item.id))
             }
           } else if (payload.eventType === 'DELETE') {
-            setPendingItems((prev) => prev.filter((p) => p.id !== (payload.old as ContentQueueItem).id))
+            setItems((prev) => prev.filter((p) => p.id !== (payload.old as ContentQueueItem).id))
           }
         }
       )
@@ -103,95 +119,123 @@ export default function ContentApprovalsPage() {
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [activeBrand?.brand_id])
 
+  // ── Handlers — no optimistic state; real-time subscription reflects new status ──
+
   async function handleApprove(item: ContentQueueItem) {
-    const {
-      data: { user },
-    } = await supabase.auth.getUser()
-
-    const { error } = await supabase
-      .from('content_queue')
-      .update({
-        status: 'approved',
-        approved_by: user?.email ?? null,
-        approved_at: new Date().toISOString(),
-        updated_at: new Date().toISOString(),
-      })
-      .eq('id', item.id)
-
-    if (error) throw error
-
-    // Optimistically move to confirming — real-time UPDATE will also fire and remove from pending
-    setPendingItems((prev) => prev.filter((p) => p.id !== item.id))
-    setConfirmingItems((prev) => [{ ...item, status: 'approved' }, ...prev])
+    setActionError(null)
+    const res = await fetch('/api/web-designer/approve', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ id: item.id, action: 'draft', brand_id: item.brand_id }),
+    })
+    if (!res.ok) {
+      const body = await res.json().catch(() => ({})) as Record<string, unknown>
+      const msg = (body.error as string) ?? `Approve failed: ${res.status}`
+      setActionError(msg)
+      throw new Error(msg)
+    }
   }
 
-  async function handleReject(id: string) {
-    const { error } = await supabase
-      .from('content_queue')
-      .update({
-        status: 'rejected',
-        updated_at: new Date().toISOString(),
-      })
-      .eq('id', id)
-
-    if (error) throw error
-
-    // Optimistic removal — real-time UPDATE will also fire
-    setPendingItems((prev) => prev.filter((p) => p.id !== id))
+  async function handleReject(item: ContentQueueItem) {
+    setActionError(null)
+    const res = await fetch('/api/web-designer/approve', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ id: item.id, action: 'reject', brand_id: item.brand_id }),
+    })
+    if (!res.ok) {
+      const body = await res.json().catch(() => ({})) as Record<string, unknown>
+      const msg = (body.error as string) ?? `Reject failed: ${res.status}`
+      setActionError(msg)
+      throw new Error(msg)
+    }
   }
 
   async function handleConfirmPublish(item: ContentQueueItem) {
-    const { error } = await supabase
-      .from('content_queue')
-      .update({
-        status: 'publish_pending',
-        updated_at: new Date().toISOString(),
-      })
-      .eq('id', item.id)
-
-    if (error) throw error
-
-    // Trigger n8n publish workflow now that status is committed
-    const webhookPayload = {
-      source_queue_id: item.id,
-      brand_id: item.brand_id,
-      platform: item.platform,
+    setActionError(null)
+    const res = await fetch('/api/content/publish', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ content_id: item.id }),
+    })
+    if (!res.ok) {
+      const body = await res.json().catch(() => ({})) as Record<string, unknown>
+      const msg = (body.error as string) ?? `Publish failed: ${res.status}`
+      setActionError(msg)
+      throw new Error(msg)
     }
-    console.log('[handleConfirmPublish] firing n8n webhook', webhookPayload)
-    const webhookRes = await fetch(
-      'https://plasmaide.app.n8n.cloud/webhook/plasmaide-content-publish',
-      {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify(webhookPayload),
-      }
-    )
-    console.log('[handleConfirmPublish] webhook response', webhookRes.status, webhookRes.ok)
-    if (!webhookRes.ok) {
-      throw new Error(`n8n webhook failed: ${webhookRes.status}`)
+  }
+
+  async function handlePullBack(item: ContentQueueItem) {
+    setActionError(null)
+    const res = await fetch('/api/web-designer/approve', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ id: item.id, action: 'pull_back', brand_id: item.brand_id }),
+    })
+    if (!res.ok) {
+      const body = await res.json().catch(() => ({})) as Record<string, unknown>
+      const msg = (body.error as string) ?? `Pull back failed: ${res.status}`
+      setActionError(msg)
+      throw new Error(msg)
     }
-
-    setConfirmingItems((prev) => prev.filter((c) => c.id !== item.id))
   }
 
-  async function handleCancelPublish(id: string) {
-    const { error } = await supabase
-      .from('content_queue')
-      .update({
-        status: 'rejected',
-        updated_at: new Date().toISOString(),
-      })
-      .eq('id', id)
+  // ── Per-item card renderer — switch on status ─────────────────────────────
 
-    if (error) throw error
+  function renderCard(item: ContentQueueItem) {
+    const status = item.status as ActiveStatus
 
-    setConfirmingItems((prev) => prev.filter((c) => c.id !== id))
+    switch (status) {
+      case 'pending':
+        return (
+          <CardErrorBoundary key={item.id} contentId={item.id}>
+            <ContentApprovalCard
+              item={item}
+              onApprove={() => handleApprove(item)}
+              onReject={() => handleReject(item)}
+              onEdit={() => {}}
+            />
+          </CardErrorBoundary>
+        )
+
+      case 'approved':
+        return (
+          <CardErrorBoundary key={item.id} contentId={item.id}>
+            <PublishConfirmCard
+              item={item}
+              onConfirm={() => handleConfirmPublish(item)}
+              onCancel={() => handlePullBack(item)}
+            />
+          </CardErrorBoundary>
+        )
+
+      case 'publish_pending':
+        return (
+          <CardErrorBoundary key={item.id} contentId={item.id}>
+            <PublishingCard
+              item={item}
+              onPullBack={() => handlePullBack(item)}
+            />
+          </CardErrorBoundary>
+        )
+
+      case 'escalated':
+        return (
+          <CardErrorBoundary key={item.id} contentId={item.id}>
+            <EscalatedCard
+              item={item}
+              onPullBack={() => handlePullBack(item)}
+            />
+          </CardErrorBoundary>
+        )
+
+      default:
+        return null
+    }
   }
 
-  function handleEdit() {
-    // Phase 3+ — inline Claude-assisted editor
-    alert('Inline editing will be available in a future phase.')
-  }
+  // ── No-brand guard ────────────────────────────────────────────────────────
 
   if (!activeBrand) {
     return (
@@ -213,6 +257,8 @@ export default function ContentApprovalsPage() {
     )
   }
 
+  // ── Main render ───────────────────────────────────────────────────────────
+
   return (
     <div className="page">
       <div className="page-head">
@@ -223,67 +269,40 @@ export default function ContentApprovalsPage() {
         <div className="page-meta">
           <span className="chip mono">
             <span className="dot" />
-            {loading ? '…' : pendingItems.length} pending
+            {loading ? '…' : items.length} active
           </span>
         </div>
       </div>
 
-      {/* Publish confirmation section */}
-      {confirmingItems.length > 0 && (
-        <div style={{ marginBottom: 20 }}>
-          <div className="section-head">
-            <h2>Awaiting publish confirmation <span className="desc">· {confirmingItems.length}</span></h2>
-          </div>
-          <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
-            {confirmingItems.map((item) => (
-              <PublishConfirmCard
-                key={item.id}
-                item={item}
-                onConfirm={() => handleConfirmPublish(item)}
-                onCancel={() => handleCancelPublish(item.id)}
-              />
-            ))}
-          </div>
+      {actionError && (
+        <div className="err-banner" style={{ marginBottom: 12 }}>
+          {actionError}
         </div>
       )}
 
-      {/* Pending approval section */}
-      <div>
-        <div className="section-head">
-          <h2>Pending approval</h2>
+      {fetchError && (
+        <div className="err-banner" style={{ marginBottom: 12 }}>
+          {fetchError}
         </div>
+      )}
 
-        {fetchError && (
-          <div className="err-banner">{fetchError}</div>
-        )}
-
-        {loading ? (
-          <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
-            <SkeletonCard />
-            <SkeletonCard />
+      {loading ? (
+        <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
+          <SkeletonCard />
+          <SkeletonCard />
+        </div>
+      ) : items.length === 0 ? (
+        <div className="card">
+          <div className="empty">
+            <div className="glyph">✓</div>
+            <div className="h">Nothing in the queue right now.</div>
           </div>
-        ) : pendingItems.length === 0 ? (
-          <div className="card">
-            <div className="empty">
-              <div className="glyph">✓</div>
-              <div className="h">Queue empty</div>
-              <p>No content awaiting approval for {activeBrand.name}.</p>
-            </div>
-          </div>
-        ) : (
-          <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
-            {pendingItems.map((item) => (
-              <ContentApprovalCard
-                key={item.id}
-                item={item}
-                onApprove={() => handleApprove(item)}
-                onReject={() => handleReject(item.id)}
-                onEdit={handleEdit}
-              />
-            ))}
-          </div>
-        )}
-      </div>
+        </div>
+      ) : (
+        <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
+          {items.map((item) => renderCard(item))}
+        </div>
+      )}
     </div>
   )
 }

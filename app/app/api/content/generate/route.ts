@@ -2,6 +2,11 @@ import { NextRequest, NextResponse } from 'next/server'
 import { createClient } from '@/lib/supabase/server'
 import { createAdminClient } from '@/lib/supabase/admin'
 import { getAgentConfig } from '@/lib/llm/provider'
+import { writeContentToQueue } from '@/lib/content/queue-writer'
+import { maxTokensForContentType } from '@/lib/content/token-budgets'
+
+export const maxDuration = 300
+export const dynamic = 'force-dynamic'
 
 const ANTHROPIC_API_URL = 'https://api.anthropic.com/v1/messages'
 const DEFAULT_MODEL = 'claude-sonnet-4-6'
@@ -238,6 +243,8 @@ Produce structured JSON output following the schema in your system prompt.`
 
   messageContent.push({ type: 'text', text: textPrompt })
 
+  const max_tokens = maxTokensForContentType(content_type)
+
   // Call Claude
   const claudeRes = await fetch(ANTHROPIC_API_URL, {
     method: 'POST',
@@ -248,7 +255,7 @@ Produce structured JSON output following the schema in your system prompt.`
     },
     body: JSON.stringify({
       model: agentCfg.model ?? DEFAULT_MODEL,
-      max_tokens: 4096,
+      max_tokens,
       system: systemPrompt,
       messages: [{ role: 'user', content: messageContent }],
     }),
@@ -264,9 +271,27 @@ Produce structured JSON output following the schema in your system prompt.`
 
   const claudeData = (await claudeRes.json()) as {
     content: Array<{ type: string; text: string }>
+    stop_reason: string
   }
 
   const rawText = claudeData.content?.[0]?.text ?? ''
+  const stopReason = claudeData.stop_reason
+  if (stopReason === 'max_tokens') {
+    console.error('[content/generate] Response truncated at max_tokens', {
+      content_type,
+      max_tokens,
+      stop_reason: stopReason,
+      raw_length: rawText.length,
+    })
+    return NextResponse.json(
+      {
+        error: 'Generation truncated — content too long for token budget',
+        detail: `Claude hit the ${max_tokens} token ceiling before completing the response. Try a more concise topic, or contact the team if this persists.`,
+        stop_reason: stopReason,
+      },
+      { status: 502 },
+    )
+  }
   console.log('[content/generate] raw Claude response:', rawText.slice(0, 1000))
 
   let generated: Record<string, unknown>
@@ -285,29 +310,26 @@ Produce structured JSON output following the schema in your system prompt.`
     generated.shopify_blog_id = SHOPIFY_BLOG_ID
   }
 
-  const { data: row, error: insertError } = await supabase
-    .from('content_queue')
-    .insert({
+  let queueResult: { content_id: string; compliance_result: { status: string; notes?: string[] } }
+  try {
+    queueResult = await writeContentToQueue({
       brand_id: 'plasmaide',
       content_type,
-      status: 'pending',
-      platform: PLATFORM_MAP[content_type] ?? null,
       content: { ...generated, ...(product_id ? { product_id } : {}) },
-      compliance_result: { status: 'pending', notes: [] },
+      platform: PLATFORM_MAP[content_type] ?? null,
+      audience: null,
+      source: 'user_generation',
+      actor: user.email ?? undefined,
+      runComplianceSync: false,
     })
-    .select('id')
-    .single()
-
-  if (insertError) {
-    return NextResponse.json({ error: insertError.message }, { status: 500, headers: { 'Cache-Control': 'no-store' } })
+  } catch (err) {
+    const msg = err instanceof Error ? err.message : String(err)
+    console.error('[content/generate] queue write failed:', msg)
+    return NextResponse.json({ error: msg }, { status: 500, headers: { 'Cache-Control': 'no-store' } })
   }
 
-  // Fire-and-forget compliance check — result writes back asynchronously
-  fetch(`${request.nextUrl.origin}/api/agents/compliance/check`, {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ content_id: row.id }),
-  }).catch((err) => console.error('[content/generate] compliance trigger failed:', err))
-
-  return NextResponse.json({ ok: true, id: row.id, content_type }, { headers: { 'Cache-Control': 'no-store' } })
+  return NextResponse.json(
+    { ok: true, id: queueResult.content_id, content_type, compliance_result: queueResult.compliance_result },
+    { headers: { 'Cache-Control': 'no-store' } },
+  )
 }

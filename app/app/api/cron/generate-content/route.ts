@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { createAdminClient } from '@/lib/supabase/admin'
-import { checkGenerationLimit } from '@/lib/plan-limits'
+import { writeContentToQueue } from '@/lib/content/queue-writer'
 import type { ContentType, ContentSchedule } from '@/types'
 
 const ANTHROPIC_API_URL = 'https://api.anthropic.com/v1/messages'
@@ -119,33 +119,18 @@ async function generateForBrand(
 
   if (contentType === 'blog') generated.shopify_blog_id = SHOPIFY_BLOG_ID
 
-  const supabase = createAdminClient()
-
-  const { error: insertError } = await supabase.from('content_queue').insert({
-    brand_id: brandId,
-    content_type: contentType,
-    status: schedule.auto_approve ? 'approved' : 'pending',
-    platform: PLATFORM_MAP[contentType] ?? null,
-    content: generated,
-    compliance_result: null,
-  })
-
-  if (insertError) return { ok: false, error: insertError.message }
-
-  // Increment generation count (fallback if RPC not deployed)
   try {
-    const rpcResult = await supabase.rpc('increment_generations', { p_brand_id: brandId })
-    if (rpcResult.error) throw rpcResult.error
-  } catch {
-    const { data: current } = await supabase
-      .from('brand_settings')
-      .select('generations_this_month')
-      .eq('brand_id', brandId)
-      .single()
-    await supabase
-      .from('brand_settings')
-      .update({ generations_this_month: (current?.generations_this_month ?? 0) + 1 })
-      .eq('brand_id', brandId)
+    await writeContentToQueue({
+      brand_id: brandId,
+      content_type: contentType,
+      content: generated,
+      platform: PLATFORM_MAP[contentType] ?? null,
+      audience: null,
+      source: 'cron',
+      runComplianceSync: false,
+    })
+  } catch (err) {
+    return { ok: false, error: err instanceof Error ? err.message : String(err) }
   }
 
   return { ok: true, contentType }
@@ -195,13 +180,6 @@ export async function GET(request: NextRequest) {
 
     // Skip if not forced and it's not time
     if (!isForced && forceBrandId !== brand.brand_id && !isTimeToGenerate(schedule)) continue
-
-    // Check plan limits
-    const limitCheck = await checkGenerationLimit(brand.brand_id)
-    if (!limitCheck.allowed) {
-      results.push({ brand_id: brand.brand_id, ok: false, error: `Generation limit reached (${limitCheck.used}/${limitCheck.limit})` })
-      continue
-    }
 
     const apiKey = brand.llm_api_key_encrypted ?? globalApiKey
     if (!apiKey) {
