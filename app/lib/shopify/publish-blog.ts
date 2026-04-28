@@ -110,7 +110,11 @@ export async function createBlogArticle(
   if (errors.length) throw new Error(`Shopify articleCreate failed: ${errors.map(e => e.message).join(', ')}`)
 
   const created = result.data?.articleCreate?.article
-  if (!created) throw new Error('Shopify returned no article after create')
+  if (!created) {
+    console.error('[publish-blog] articleCreate returned null. Full response:', JSON.stringify(result, null, 2))
+    console.error('[publish-blog] Input that failed:', JSON.stringify(input, null, 2))
+    throw new Error('Shopify returned no article after create')
+  }
 
   return { shopify_article_id: created.id, handle: created.handle, url: created.onlineStoreUrl }
 }

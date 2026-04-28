@@ -53,7 +53,23 @@ export async function shopifyGraphQL<T>(
       throw new Error(`Shopify API error: ${res.status} ${res.statusText}`)
     }
 
-    return res.json() as Promise<ShopifyGraphQLResponse<T>>
+    const response = await res.json() as ShopifyGraphQLResponse<T>
+
+    if (response.errors && response.errors.length > 0) {
+      console.error('[shopifyGraphQL] GraphQL errors in response:', JSON.stringify(response.errors, null, 2))
+    }
+    if (response.data && typeof response.data === 'object') {
+      for (const [key, value] of Object.entries(response.data as Record<string, unknown>)) {
+        if (value && typeof value === 'object' && 'userErrors' in value) {
+          const userErrors = (value as { userErrors?: unknown }).userErrors
+          if (Array.isArray(userErrors) && userErrors.length > 0) {
+            console.error(`[shopifyGraphQL] userErrors on ${key}:`, JSON.stringify(userErrors, null, 2))
+          }
+        }
+      }
+    }
+
+    return response
   }
 
   throw new Error('Shopify request failed after max retries')
