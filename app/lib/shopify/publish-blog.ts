@@ -19,10 +19,15 @@ mutation ArticleCreate($blogId: ID!, $article: ArticleCreateInput!) {
   articleCreate(blogId: $blogId, article: $article) {
     article {
       id
+      title
       handle
-      onlineStoreUrl
+      body
+      summary
+      isPublished
+      publishedAt
+      author { name }
     }
-    userErrors { field message }
+    userErrors { code field message }
   }
 }
 `
@@ -32,10 +37,15 @@ mutation ArticleUpdate($id: ID!, $article: ArticleUpdateInput!) {
   articleUpdate(id: $id, article: $article) {
     article {
       id
+      title
       handle
-      onlineStoreUrl
+      body
+      summary
+      isPublished
+      publishedAt
+      author { name }
     }
-    userErrors { field message }
+    userErrors { code field message }
   }
 }
 `
@@ -59,16 +69,18 @@ export interface BlogPublishResult {
   url: string | null
 }
 
-async function getBlogId(shopDomain: string, accessToken: string): Promise<string> {
+type BlogNode = { id: string; title: string; handle: string }
+
+async function getBlog(shopDomain: string, accessToken: string): Promise<{ id: string; handle: string | null }> {
   try {
     const result = await shopifyGraphQL<{
-      blogs: { nodes: Array<{ id: string; title: string }> }
+      blogs: { nodes: Array<BlogNode> }
     }>(shopDomain, accessToken, BLOGS_QUERY)
     const first = result.data?.blogs?.nodes?.[0]
-    return first?.id ?? FALLBACK_BLOG_GID
+    return { id: first?.id ?? FALLBACK_BLOG_GID, handle: first?.handle ?? null }
   } catch {
     console.warn('[publish-blog] Failed to fetch blogs, falling back to default ID')
-    return FALLBACK_BLOG_GID
+    return { id: FALLBACK_BLOG_GID, handle: null }
   }
 }
 
@@ -80,29 +92,40 @@ function buildArticleInput(input: BlogPublishInput): Record<string, unknown> {
     author: { name: input.author ?? 'Plasmaide' },
   }
 
-  if (input.summary_html) article.summaryHtml = input.summary_html
+  if (input.summary_html) article.summary = input.summary_html
   if (input.tags?.length) article.tags = input.tags
   if (input.handle) article.handle = input.handle
-  if (input.published && input.published_at) article.publishedAt = input.published_at
-  if (input.seo_title || input.seo_description) {
-    article.seo = { title: input.seo_title ?? null, description: input.seo_description ?? null }
-  }
+  if (input.published && input.published_at) article.publishDate = input.published_at
+  // SEO metadata not supported on ArticleCreateInput; future work via metafields write.
 
   return article
 }
+
+type ArticleResponse = {
+  id: string
+  title: string
+  handle: string
+  body: string
+  summary: string | null
+  isPublished: boolean
+  publishedAt: string | null
+  author: { name: string }
+} | null
+
+type ArticleUserError = { code: string; field: string[]; message: string }
 
 export async function createBlogArticle(
   shopDomain: string,
   accessToken: string,
   input: BlogPublishInput,
 ): Promise<BlogPublishResult> {
-  const blogId = await getBlogId(shopDomain, accessToken)
+  const { id: blogId, handle: blogHandle } = await getBlog(shopDomain, accessToken)
   const article = buildArticleInput(input)
 
   const result = await shopifyGraphQL<{
     articleCreate: {
-      article: { id: string; handle: string; onlineStoreUrl: string | null } | null
-      userErrors: Array<{ field: string[]; message: string }>
+      article: ArticleResponse
+      userErrors: Array<ArticleUserError>
     }
   }>(shopDomain, accessToken, ARTICLE_CREATE_MUTATION, { blogId, article })
 
@@ -116,7 +139,11 @@ export async function createBlogArticle(
     throw new Error('Shopify returned no article after create')
   }
 
-  return { shopify_article_id: created.id, handle: created.handle, url: created.onlineStoreUrl }
+  const url = blogHandle && created.handle
+    ? `https://${shopDomain}/blogs/${blogHandle}/${created.handle}`
+    : null
+
+  return { shopify_article_id: created.id, handle: created.handle, url }
 }
 
 export async function updateBlogArticle(
@@ -129,20 +156,18 @@ export async function updateBlogArticle(
 
   if (input.title !== undefined) article.title = input.title
   if (input.body_html !== undefined) article.body = input.body_html
-  if (input.summary_html !== undefined) article.summaryHtml = input.summary_html
+  if (input.summary_html !== undefined) article.summary = input.summary_html
   if (input.tags !== undefined) article.tags = input.tags
   if (input.published !== undefined) {
     article.isPublished = input.published
-    if (input.published) article.publishedAt = input.published_at ?? new Date().toISOString()
+    if (input.published) article.publishDate = input.published_at ?? new Date().toISOString()
   }
-  if (input.seo_title || input.seo_description) {
-    article.seo = { title: input.seo_title ?? null, description: input.seo_description ?? null }
-  }
+  // SEO metadata not supported on ArticleUpdateInput; future work via metafields write.
 
   const result = await shopifyGraphQL<{
     articleUpdate: {
-      article: { id: string; handle: string; onlineStoreUrl: string | null } | null
-      userErrors: Array<{ field: string[]; message: string }>
+      article: ArticleResponse
+      userErrors: Array<ArticleUserError>
     }
   }>(shopDomain, accessToken, ARTICLE_UPDATE_MUTATION, { id: articleId, article })
 
@@ -152,5 +177,5 @@ export async function updateBlogArticle(
   const updated = result.data?.articleUpdate?.article
   if (!updated) throw new Error('Shopify returned no article after update')
 
-  return { shopify_article_id: updated.id, handle: updated.handle, url: updated.onlineStoreUrl }
+  return { shopify_article_id: updated.id, handle: updated.handle, url: null }
 }
