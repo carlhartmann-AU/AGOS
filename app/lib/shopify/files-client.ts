@@ -41,7 +41,7 @@ const STAGED_UPLOADS_CREATE = `
         resourceUrl
         parameters { name value }
       }
-      userErrors { code field message }
+      userErrors { field message }
     }
   }
 `
@@ -56,7 +56,7 @@ const FILE_CREATE = `
           image { url }
         }
       }
-      userErrors { code field message }
+      userErrors { field message }
     }
   }
 `
@@ -81,7 +81,7 @@ type StagedTarget = {
   parameters: Array<{ name: string; value: string }>
 }
 
-type UserError = { code: string; field: string[]; message: string }
+type UserError = { field: string[]; message: string }
 
 type FileNode = {
   id: string
