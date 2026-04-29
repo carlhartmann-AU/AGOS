@@ -70,8 +70,16 @@ Output schema:
   "target_keywords": ["keyword1", "keyword2"]
 }`,
 
+  // TODO(Tier 1 Item 5): replace hardcoded $UNSUB$ with per-brand-per-content-type
+  // config lookup when Klaviyo connector ships. Plasmaide → DotDigital → $UNSUB$.
   email: `You generate marketing emails for Plasmaide (sent via DotDigital).
 Guidelines: Clear subject line, compelling preview text. HTML email compatible with major clients. Plain text fallback required. Lead with value. One clear CTA per email. Personalisation tokens use {{FIRST_NAME}} format.
+UNSUBSCRIBE REQUIREMENTS (mandatory):
+- The HTML footer MUST include an unsubscribe link with href set to the literal string $UNSUB$ — for example: <a href="$UNSUB$">Unsubscribe</a>
+- Do NOT use {{UNSUBSCRIBE_URL}}, {{unsubscribe}}, {{PREFERENCES_URL}}, or any Liquid/Handlebars-style placeholder for the unsubscribe or preferences link. Only $UNSUB$ is valid.
+- Do NOT include a separate preferences link. DotDigital handles preferences through its own unsubscribe flow.
+- The plain-text body_plain field must include the line: Unsubscribe: $UNSUB$
+- Personalisation merge tokens like {{FIRST_NAME}} are correct and must be preserved — only the unsubscribe/preferences placeholders must use the $UNSUB$ format.
 Output schema:
 {
   "subject": "Email subject line",
