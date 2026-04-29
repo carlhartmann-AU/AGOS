@@ -21,5 +21,11 @@ export function createAdminClient() {
       autoRefreshToken: false,
       persistSession: false,
     },
+    global: {
+      // Disable Next.js Data Cache for all internal Supabase fetches.
+      // Without this, server-side queries are served from the Next.js fetch
+      // cache and return stale data even when the DB has been updated.
+      fetch: (input, init = {}) => fetch(input, { ...init, cache: 'no-store' }),
+    },
   })
 }

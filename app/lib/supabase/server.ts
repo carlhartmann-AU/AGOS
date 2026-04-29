@@ -23,6 +23,10 @@ export function createClient() {
           }
         },
       },
+      global: {
+        // Disable Next.js Data Cache for all internal Supabase fetches.
+        fetch: (input, init = {}) => fetch(input, { ...init, cache: 'no-store' }),
+      },
     }
   )
 }
