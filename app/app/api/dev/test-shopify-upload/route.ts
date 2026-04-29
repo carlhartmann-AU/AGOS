@@ -99,7 +99,7 @@ export async function POST(req: NextRequest) {
   }
 
   // 4. Read bundled test asset
-  const assetPath = path.join(process.cwd(), 'app/lib/shopify/test-asset.jpg')
+  const assetPath = path.join(process.cwd(), 'lib/shopify/test-asset.jpg')
   const buffer = await readFile(assetPath)
 
   // 5. Construct timestamped filename
