@@ -113,6 +113,23 @@ export default function ApprovalsPage() {
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [activeBrand?.brand_id])
 
+  // Refetch on action success — the Supabase Realtime subscription doesn't deliver
+  // UPDATE events when the post-action row status falls outside the user's RLS policy
+  // (e.g. reject → 'rejected' is no longer visible to the subscriber). Explicit refetch
+  // guarantees the UI reconciles regardless of subscription delivery.
+  async function refetchItems() {
+    if (!activeBrand) return
+    const { data, error } = await supabase
+      .from('content_queue')
+      .select('*')
+      .eq('brand_id', activeBrand.brand_id)
+      .in('status', [...ACTIVE_STATUSES])
+      .order('updated_at', { ascending: false })
+    if (!error && data) {
+      setItems(data as ContentQueueItem[])
+    }
+  }
+
   function showError(err: unknown) {
     if (err instanceof ApprovalActionError) {
       setActionError(err.detail ? `${err.message}: ${err.detail}` : err.message)
@@ -127,8 +144,10 @@ export default function ApprovalsPage() {
     setActionError(null)
     try {
       await dispatcher.approve(item)
+      await refetchItems()
     } catch (err) {
       showError(err)
+      throw err // re-throw: card's onApprove() catch block clears actionLoading
     }
   }
 
@@ -136,8 +155,10 @@ export default function ApprovalsPage() {
     setActionError(null)
     try {
       await dispatcher.goLive(item)
+      await refetchItems()
     } catch (err) {
       showError(err)
+      throw err
     }
   }
 
@@ -145,8 +166,10 @@ export default function ApprovalsPage() {
     setActionError(null)
     try {
       await dispatcher.confirmPublish(item)
+      await refetchItems()
     } catch (err) {
       showError(err)
+      throw err
     }
   }
 
@@ -154,8 +177,10 @@ export default function ApprovalsPage() {
     setActionError(null)
     try {
       await dispatcher.reject(item)
+      await refetchItems()
     } catch (err) {
       showError(err)
+      throw err
     }
   }
 
@@ -163,8 +188,10 @@ export default function ApprovalsPage() {
     setActionError(null)
     try {
       await dispatcher.pullBack(item)
+      await refetchItems()
     } catch (err) {
       showError(err)
+      throw err
     }
   }
 
