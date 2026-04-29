@@ -415,7 +415,7 @@ Produce structured JSON output following the schema in your system prompt.`
     generated.shopify_blog_id = SHOPIFY_BLOG_ID
   }
 
-  let queueResult: { content_id: string; compliance_result: { status: string; notes?: string[] } }
+  let queueResult: { content_id: string; compliance_result: { status: string; notes?: string[]; error?: string } }
   try {
     queueResult = await writeContentToQueue({
       brand_id,
@@ -425,7 +425,6 @@ Produce structured JSON output following the schema in your system prompt.`
       audience: null,
       source: 'user_generation',
       actor: user.email ?? undefined,
-      runComplianceSync: false,
       hero_image_url: heroImageResult.cdn_url,
       hero_image_status: heroImageResult.status === 'omitted' ? null : heroImageResult.status,
       hero_image_file_id: heroImageResult.file_id,

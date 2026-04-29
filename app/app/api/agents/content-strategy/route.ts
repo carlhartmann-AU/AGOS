@@ -285,7 +285,6 @@ async function runPieceThroughCompliance(
       platform: brief.platform ?? null,
       audience: piece.audience ?? null,
       source: 'agent_strategy',
-      runComplianceSync: false,
     })
     const row = { id: queueResult.content_id, status }
 
@@ -498,7 +497,6 @@ export async function POST(req: NextRequest) {
             platform: brief.platform ?? null,
             audience: state.piece.audience ?? null,
             source: 'agent_strategy',
-            runComplianceSync: false,
           })
           const row = { id: escalatedQueue.content_id, status: 'escalated' }
 

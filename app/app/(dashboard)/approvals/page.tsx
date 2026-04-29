@@ -187,7 +187,6 @@ export default function ApprovalsPage() {
             item={item}
             onApprove={() => handleApprove(item)}
             onReject={() => handleReject(item)}
-            onEdit={() => {}}
           />
         </CardErrorBoundary>
       )

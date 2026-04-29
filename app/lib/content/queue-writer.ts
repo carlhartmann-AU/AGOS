@@ -1,11 +1,12 @@
 // lib/content/queue-writer.ts
 // CANONICAL write path for content_queue INSERTs.
-// All three callers MUST use this helper — direct inserts in route files are banned.
+// All callers MUST use this helper — direct inserts in route files are banned.
+// Compliance is always-synchronous, always-awaited. runComplianceSync is removed.
 //
 // Callers:
-//   1. app/app/api/content/generate/route.ts   (source: 'user_generation', runComplianceSync: false)
-//   2. app/app/api/agents/content-strategy/route.ts (source: 'agent_strategy', runComplianceSync: true)
-//   3. app/app/api/cron/generate-content/route.ts   (source: 'cron', runComplianceSync: false)
+//   1. app/app/api/content/generate/route.ts   (source: 'user_generation')
+//   2. app/app/api/agents/content-strategy/route.ts (source: 'agent_strategy')
+//   3. app/app/api/cron/generate-content/route.ts   (source: 'cron')
 
 import { createAdminClient } from '@/lib/supabase/admin'
 
@@ -25,16 +26,15 @@ export async function writeContentToQueue(input: {
   audience: string | null
   source: 'user_generation' | 'agent_strategy' | 'cron'
   actor?: string
-  runComplianceSync: boolean
   hero_image_url?: string | null
   hero_image_status?: string | null
   hero_image_file_id?: string | null
 }): Promise<{
   content_id: string
-  compliance_result: { status: string; notes?: string[] }
+  compliance_result: { status: string; notes?: string[]; error?: string }
 }> {
   const {
-    brand_id, content_type, content, platform, audience, source, actor, runComplianceSync,
+    brand_id, content_type, content, platform, audience, source, actor,
     hero_image_url = null, hero_image_status = null, hero_image_file_id = null,
   } = input
 
@@ -87,32 +87,44 @@ export async function writeContentToQueue(input: {
     console.warn('[queue-writer] audit_log write failed (non-fatal):', auditErr)
   }
 
-  // Compliance
+  // Compliance — always synchronous, always awaited.
+  // Fire-and-forget was killed: Vercel terminates serverless functions before
+  // orphaned TCP connections complete, so async compliance never ran in practice.
   const complianceUrl = `${getInternalBaseUrl()}/api/agents/compliance/check`
-  const complianceBody = JSON.stringify({ content_id })
-
-  if (runComplianceSync) {
-    try {
-      const res = await fetch(complianceUrl, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: complianceBody,
-      })
-      const json = (await res.json().catch(() => ({}))) as Record<string, unknown>
-      const result = json.result as Record<string, unknown> | undefined
-      const status = (result?.overall_status as string) ?? 'pending'
-      return { content_id, compliance_result: { status } }
-    } catch (compErr) {
-      console.error('[queue-writer] sync compliance check failed:', compErr)
-      return { content_id, compliance_result: { status: 'pending', notes: ['compliance_check_failed'] } }
-    }
-  } else {
-    fetch(complianceUrl, {
+  try {
+    const res = await fetch(complianceUrl, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: complianceBody,
-    }).catch((err) => console.error('[queue-writer] async compliance trigger failed:', err))
+      body: JSON.stringify({ content_id }),
+    })
 
-    return { content_id, compliance_result: { status: 'pending', notes: [] } }
+    const json = (await res.json().catch(() => ({}))) as Record<string, unknown>
+
+    // Agent disabled for this brand — not an error, just skip
+    if (json.disabled) {
+      return { content_id, compliance_result: { status: 'skipped' } }
+    }
+
+    if (!res.ok) {
+      throw new Error(`compliance HTTP ${res.status}: ${String(json.error ?? 'unknown')}`)
+    }
+
+    const result = json.result as Record<string, unknown> | undefined
+    const status = (result?.overall_status as string) ?? 'pending'
+    return { content_id, compliance_result: { status } }
+  } catch (compErr) {
+    const errMsg = compErr instanceof Error ? compErr.message : String(compErr)
+    console.error('[queue-writer] compliance check failed:', { brand_id, content_id, error: errMsg })
+
+    // Compliance route never ran — write errored state directly
+    const { error: updateErr } = await supabase
+      .from('content_queue')
+      .update({ compliance_status: 'errored' })
+      .eq('id', content_id)
+    if (updateErr) {
+      console.error('[queue-writer] failed to persist errored compliance_status:', updateErr.message)
+    }
+
+    return { content_id, compliance_result: { status: 'errored', error: errMsg } }
   }
 }

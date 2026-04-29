@@ -203,10 +203,9 @@ type Props = {
   item: ContentQueueItem
   onApprove: () => Promise<void>
   onReject: () => Promise<void>
-  onEdit: () => void
 }
 
-export function ContentApprovalCard({ item, onApprove, onReject, onEdit }: Props) {
+export function ContentApprovalCard({ item, onApprove, onReject }: Props) {
   const [actionLoading, setActionLoading] = useState<'approve' | 'reject' | null>(null)
   const [error, setError] = useState<string | null>(null)
 
@@ -303,13 +302,6 @@ export function ContentApprovalCard({ item, onApprove, onReject, onEdit }: Props
 
       {/* Action buttons */}
       <div className="px-5 py-3 border-t border-gray-100 flex items-center justify-end gap-2">
-        <button
-          onClick={onEdit}
-          disabled={!!actionLoading}
-          className="px-3 py-1.5 text-xs font-medium text-gray-600 bg-white border border-gray-200 rounded hover:bg-gray-50 disabled:opacity-50 transition-colors"
-        >
-          Edit
-        </button>
         <button
           onClick={handleReject}
           disabled={!!actionLoading}

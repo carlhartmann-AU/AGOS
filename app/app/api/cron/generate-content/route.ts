@@ -127,7 +127,6 @@ async function generateForBrand(
       platform: PLATFORM_MAP[contentType] ?? null,
       audience: null,
       source: 'cron',
-      runComplianceSync: false,
     })
   } catch (err) {
     return { ok: false, error: err instanceof Error ? err.message : String(err) }
