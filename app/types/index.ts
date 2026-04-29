@@ -53,6 +53,9 @@ export type ContentQueueItem = {
   published_at: string | null
   created_at: string
   updated_at: string
+  hero_image_url: string | null
+  hero_image_status: 'uploaded' | 'failed' | null
+  hero_image_file_id: string | null
 }
 
 export type FinancialActionType =

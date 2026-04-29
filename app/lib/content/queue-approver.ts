@@ -205,6 +205,7 @@ async function tryShopifyPublish(
       seo_description: (content.meta_description ?? content.seo_description) as string | undefined,
       published: action === 'go_live',
       published_at: action === 'go_live' ? new Date().toISOString() : undefined,
+      hero_image_url: (queueRow.hero_image_url as string | undefined) ?? undefined,
     }
 
     const existingArticleId = content.shopify_article_id as string | undefined

@@ -61,6 +61,7 @@ export interface BlogPublishInput {
   seo_description?: string
   published: boolean
   published_at?: string
+  hero_image_url?: string
 }
 
 export interface BlogPublishResult {
@@ -96,6 +97,7 @@ function buildArticleInput(input: BlogPublishInput): Record<string, unknown> {
   if (input.tags?.length) article.tags = input.tags
   if (input.handle) article.handle = input.handle
   if (input.published && input.published_at) article.publishDate = input.published_at
+  if (input.hero_image_url) article.image = { url: input.hero_image_url, altText: input.title }
   // SEO metadata not supported on ArticleCreateInput; future work via metafields write.
 
   return article

@@ -9,11 +9,17 @@ export class ShopifyFilesError extends Error {
     public errorCode: 'SHOPIFY_GRAPHQL_ERROR' | 'SHOPIFY_USER_ERROR' | 'NETWORK_ERROR' | 'TIMEOUT',
     message: string,
     public shopifyResponse?: unknown,
+    public retryCount?: number,
   ) {
     super(message)
     this.name = 'ShopifyFilesError'
   }
 }
+
+// Validation/auth errors won't resolve with retry — throw immediately.
+const NO_RETRY_CODES: ShopifyFilesError['errorCode'][] = ['SHOPIFY_USER_ERROR']
+// Delays before attempt 1 and attempt 2 (attempt 0 runs immediately).
+const RETRY_BACKOFF_MS = [500, 1500]
 
 export interface UploadFileInput {
   shopDomain: string
@@ -89,9 +95,39 @@ type FileNode = {
   image?: { url: string } | null
 }
 
-// ─── uploadFile ───────────────────────────────────────────────────────────────
+// ─── uploadFile (with bounded retry) ─────────────────────────────────────────
 
 export async function uploadFile(input: UploadFileInput): Promise<UploadFileResult> {
+  const MAX_RETRIES = 2
+  let lastErr: ShopifyFilesError | Error | undefined
+
+  for (let attempt = 0; attempt <= MAX_RETRIES; attempt++) {
+    if (attempt > 0) {
+      await new Promise(resolve => setTimeout(resolve, RETRY_BACKOFF_MS[attempt - 1]))
+    }
+    try {
+      return await uploadFileOnce(input)
+    } catch (err) {
+      if (err instanceof ShopifyFilesError && NO_RETRY_CODES.includes(err.errorCode)) {
+        throw err
+      }
+      lastErr = err instanceof Error ? err : new Error(String(err))
+    }
+  }
+
+  if (lastErr instanceof ShopifyFilesError) {
+    throw new ShopifyFilesError(
+      lastErr.stage,
+      lastErr.errorCode,
+      lastErr.message,
+      lastErr.shopifyResponse,
+      MAX_RETRIES,
+    )
+  }
+  throw lastErr ?? new Error('uploadFile: no attempts completed')
+}
+
+async function uploadFileOnce(input: UploadFileInput): Promise<UploadFileResult> {
   const startTime = Date.now()
 
   // Step 1 — stagedUploadsCreate

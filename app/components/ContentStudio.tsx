@@ -445,9 +445,14 @@ export function ContentStudio({ brandId = 'plasmaide' }: { brandId?: string }) {
   const [additionalContext, setAdditionalContext] = useState('')
   const [images, setImages] = useState<UploadedImage[]>([])
   const [selectedProduct, setSelectedProduct] = useState<Product | null>(null)
+  const [heroImage, setHeroImage] = useState<File | null>(null)
+  const [heroImagePreview, setHeroImagePreview] = useState<string | null>(null)
+  const [heroImageError, setHeroImageError] = useState<string | null>(null)
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState<string | null>(null)
   const [successId, setSuccessId] = useState<string | null>(null)
+  const [successWarning, setSuccessWarning] = useState<string | null>(null)
+  const heroInputRef = useRef<HTMLInputElement>(null)
 
   // Pre-select product from ?product_id= query param
   useEffect(() => {
@@ -479,8 +484,33 @@ export function ContentStudio({ brandId = 'plasmaide' }: { brandId?: string }) {
     setKeywords('')
     setAdditionalContext('')
     setImages([])
+    setHeroImage(null)
+    if (heroImagePreview) { URL.revokeObjectURL(heroImagePreview); setHeroImagePreview(null) }
+    setHeroImageError(null)
     setError(null)
     setSuccessId(null)
+    setSuccessWarning(null)
+  }
+
+  function handleHeroImageSelect(file: File | null) {
+    if (heroImagePreview) URL.revokeObjectURL(heroImagePreview)
+    if (!file) {
+      setHeroImage(null); setHeroImagePreview(null); setHeroImageError(null)
+      return
+    }
+    if (!['image/jpeg', 'image/png'].includes(file.type)) {
+      setHeroImageError('Hero image must be JPEG or PNG.')
+      setHeroImage(null); setHeroImagePreview(null)
+      return
+    }
+    if (file.size > 5 * 1024 * 1024) {
+      setHeroImageError('Hero image must be ≤ 5MB.')
+      setHeroImage(null); setHeroImagePreview(null)
+      return
+    }
+    setHeroImageError(null)
+    setHeroImage(file)
+    setHeroImagePreview(URL.createObjectURL(file))
   }
 
   function addImages(newImgs: UploadedImage[]) {
@@ -498,10 +528,11 @@ export function ContentStudio({ brandId = 'plasmaide' }: { brandId?: string }) {
 
   async function handleGenerate(e: React.FormEvent) {
     e.preventDefault()
-    if (!topic.trim() || loading) return
+    if (!topic.trim() || loading || heroImageError) return
     setLoading(true)
     setError(null)
     setSuccessId(null)
+    setSuccessWarning(null)
 
     try {
       const target_keywords = keywords
@@ -509,31 +540,38 @@ export function ContentStudio({ brandId = 'plasmaide' }: { brandId?: string }) {
         .map((k) => k.trim())
         .filter(Boolean)
 
-      const res = await fetch('/api/content/generate', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          topic: topic.trim(),
-          target_keywords,
-          content_type: contentType,
-          additional_context: additionalContext.trim() || undefined,
-          product_id: selectedProduct?.id ?? undefined,
-          images: images.map(({ name, base64, mediaType }) => ({ name, base64, mediaType })),
-        }),
-      })
+      const fd = new FormData()
+      fd.append('topic', topic.trim())
+      fd.append('content_type', contentType)
+      fd.append('target_keywords', JSON.stringify(target_keywords))
+      if (additionalContext.trim()) fd.append('additional_context', additionalContext.trim())
+      if (selectedProduct?.id) fd.append('product_id', selectedProduct.id)
+      if (images.length) {
+        fd.append('images', JSON.stringify(images.map(({ name, base64, mediaType }) => ({ name, base64, mediaType }))))
+      }
+      if (heroImage) fd.append('hero_image', heroImage)
 
-      const body = await res.json()
+      const res = await fetch('/api/content/generate', { method: 'POST', body: fd })
+      const body = (await res.json()) as {
+        ok?: boolean
+        id?: string
+        error?: string
+        hero_image?: { status: string; cdn_url: string | null; error_code: string | null }
+      }
       if (!res.ok) throw new Error(body.error ?? `Request failed: ${res.status}`)
 
-      setSuccessId(body.id)
+      const heroStatus = body.hero_image?.status
+      if (heroStatus === 'failed') {
+        setSuccessWarning('Article created but hero image upload failed — you can re-upload during approval.')
+      }
+      setSuccessId(body.id ?? null)
       setTopic('')
       setKeywords('')
       setAdditionalContext('')
       setSelectedTemplate('')
-      setImages((prev) => {
-        prev.forEach((img) => URL.revokeObjectURL(img.preview))
-        return []
-      })
+      setImages((prev) => { prev.forEach((img) => URL.revokeObjectURL(img.preview)); return [] })
+      setHeroImage(null)
+      if (heroImagePreview) { URL.revokeObjectURL(heroImagePreview); setHeroImagePreview(null) }
     } catch (e) {
       setError(e instanceof Error ? e.message : 'Generation failed')
     } finally {
@@ -658,7 +696,60 @@ export function ContentStudio({ brandId = 'plasmaide' }: { brandId?: string }) {
             />
           </div>
 
-          {/* Image upload */}
+          {/* Hero image */}
+          <div>
+            <label className="block text-xs font-medium text-gray-700 mb-1.5">
+              Hero image <span className="text-gray-400 font-normal">(optional — JPEG or PNG, ≤ 5MB, uploaded to Shopify Files)</span>
+            </label>
+            {heroImage && heroImagePreview ? (
+              <div className="flex items-center gap-3 p-2.5 bg-gray-50 border border-gray-200 rounded-lg">
+                {/* eslint-disable-next-line @next/next/no-img-element */}
+                <img
+                  src={heroImagePreview}
+                  alt={heroImage.name}
+                  className="w-14 h-14 object-cover rounded border border-gray-100 shrink-0"
+                />
+                <div className="flex-1 min-w-0">
+                  <p className="text-sm font-medium text-gray-900 truncate">{heroImage.name}</p>
+                  <p className="text-xs text-gray-400">{Math.round(heroImage.size / 1024)}KB · {heroImage.type}</p>
+                </div>
+                <button
+                  type="button"
+                  onClick={() => handleHeroImageSelect(null)}
+                  disabled={loading}
+                  className="text-gray-400 hover:text-gray-700 text-lg leading-none shrink-0 disabled:opacity-40"
+                  title="Remove image"
+                >
+                  ×
+                </button>
+              </div>
+            ) : (
+              <div
+                onClick={() => !loading && heroInputRef.current?.click()}
+                className={`border-2 border-dashed rounded-lg px-4 py-4 text-center cursor-pointer transition-colors
+                  ${heroImageError ? 'border-red-300 bg-red-50' : 'border-gray-200 hover:border-gray-400'}
+                  ${loading ? 'opacity-50 cursor-not-allowed' : ''}`}
+              >
+                <p className="text-xs text-gray-500">
+                  Click to select a hero image, or drag & drop
+                </p>
+                <p className="text-xs text-gray-400 mt-0.5">JPEG or PNG · Max 5MB</p>
+              </div>
+            )}
+            <input
+              ref={heroInputRef}
+              type="file"
+              accept="image/jpeg,image/png"
+              className="hidden"
+              disabled={loading}
+              onChange={(e) => handleHeroImageSelect(e.target.files?.[0] ?? null)}
+            />
+            {heroImageError && (
+              <p className="text-xs text-red-600 mt-1">{heroImageError}</p>
+            )}
+          </div>
+
+          {/* Reference images (sent to Claude as context) */}
           <ImageUploadArea
             images={images}
             onAdd={addImages}
@@ -673,8 +764,18 @@ export function ContentStudio({ brandId = 'plasmaide' }: { brandId?: string }) {
             </div>
           )}
 
+          {/* Success with warning */}
+          {successId && successWarning && (
+            <div className="bg-amber-50 border border-amber-200 rounded-lg px-4 py-3 text-sm text-amber-700">
+              ⚠ {successWarning}{' '}
+              <a href="/approvals" className="font-medium underline">
+                Review now →
+              </a>
+            </div>
+          )}
+
           {/* Success */}
-          {successId && (
+          {successId && !successWarning && (
             <div className="bg-green-50 border border-green-200 rounded-lg px-4 py-3 text-sm text-green-700">
               Content generated and added to the approval queue.{' '}
               <a href="/approvals" className="font-medium underline">
@@ -687,7 +788,7 @@ export function ContentStudio({ brandId = 'plasmaide' }: { brandId?: string }) {
           <div className="flex justify-end pt-1">
             <button
               type="submit"
-              disabled={loading || !topic.trim()}
+              disabled={loading || !topic.trim() || !!heroImageError}
               className="px-5 py-2 text-sm font-medium text-white bg-gray-900 rounded-lg hover:bg-gray-700 disabled:opacity-50 transition-colors flex items-center gap-2"
             >
               {loading ? (

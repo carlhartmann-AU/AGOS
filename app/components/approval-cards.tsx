@@ -1,6 +1,6 @@
 'use client'
 
-import { useState } from 'react'
+import { useRef, useState } from 'react'
 import type { ContentQueueItem } from '@/types'
 
 export { ContentApprovalCard } from './ContentApprovalCard'
@@ -54,6 +54,79 @@ function CardHeader({ item, badge }: { item: ContentQueueItem; badge: React.Reac
       )}
     </div>
   )
+}
+
+// ─── HeroImageBadge ──────────────────────────────────────────────────────────
+// Renders hero image thumbnail, warning band, or nothing based on status.
+
+function HeroImageBadge({ item }: { item: ContentQueueItem }) {
+  const [status, setStatus] = useState<'uploaded' | 'failed' | null>(item.hero_image_status ?? null)
+  const [url, setUrl] = useState<string | null>(item.hero_image_url ?? null)
+  const [uploading, setUploading] = useState(false)
+  const [uploadError, setUploadError] = useState<string | null>(null)
+  const fileInputRef = useRef<HTMLInputElement>(null)
+
+  async function handleReupload(file: File) {
+    setUploading(true)
+    setUploadError(null)
+    const fd = new FormData()
+    fd.append('hero_image', file)
+    try {
+      const res = await fetch(`/api/content/${item.id}/hero-image`, { method: 'PATCH', body: fd })
+      const body = (await res.json()) as { ok?: boolean; hero_image?: { cdn_url: string }; error_code?: string; error_message?: string }
+      if (!res.ok || !body.ok) {
+        setUploadError(body.error_message ?? body.error_code ?? 'Upload failed')
+        return
+      }
+      setUrl(body.hero_image?.cdn_url ?? null)
+      setStatus('uploaded')
+    } catch {
+      setUploadError('Network error — please try again')
+    } finally {
+      setUploading(false)
+    }
+  }
+
+  if (status === 'uploaded' && url) {
+    return (
+      <div className="px-5 pb-3 flex items-center gap-2">
+        {/* eslint-disable-next-line @next/next/no-img-element */}
+        <img
+          src={url}
+          alt="Hero image"
+          loading="lazy"
+          className="w-[60px] h-[60px] object-cover rounded border border-gray-200 shrink-0"
+        />
+        <p className="text-xs text-gray-400">Hero image</p>
+      </div>
+    )
+  }
+
+  if (status === 'failed') {
+    return (
+      <div className="mx-5 mb-3 bg-amber-50 border border-amber-200 rounded px-3 py-2 space-y-1.5">
+        <p className="text-xs font-medium text-amber-700">⚠ Hero image upload failed during generation</p>
+        {uploadError && <p className="text-xs text-red-600">{uploadError}</p>}
+        <button
+          type="button"
+          disabled={uploading}
+          onClick={() => fileInputRef.current?.click()}
+          className="text-xs font-medium text-amber-700 underline underline-offset-2 disabled:opacity-50"
+        >
+          {uploading ? 'Uploading…' : 'Re-upload image'}
+        </button>
+        <input
+          ref={fileInputRef}
+          type="file"
+          accept="image/jpeg,image/png"
+          className="hidden"
+          onChange={(e) => { const f = e.target.files?.[0]; if (f) handleReupload(f) }}
+        />
+      </div>
+    )
+  }
+
+  return null
 }
 
 // ─── PublishingCard ───────────────────────────────────────────────────────────
@@ -192,6 +265,7 @@ export function EscalatedCard({ item, onPullBack }: PullBackProps) {
           )}
         </div>
       ) : null}
+      <HeroImageBadge item={item} />
       {error && (
         <div className="px-5 pb-3">
           <p className="text-xs text-red-600">{error}</p>
@@ -278,6 +352,7 @@ export function BlogGoLiveCard({ item, onGoLive, onReject }: BlogGoLiveProps) {
           <p className="text-xs text-gray-500 line-clamp-2">{bodyPreview}…</p>
         )}
       </div>
+      <HeroImageBadge item={item} />
       {(item.approved_by || item.approved_at) && (
         <div className="px-5 pb-3">
           <p className="text-xs text-gray-400">

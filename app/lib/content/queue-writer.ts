@@ -26,11 +26,17 @@ export async function writeContentToQueue(input: {
   source: 'user_generation' | 'agent_strategy' | 'cron'
   actor?: string
   runComplianceSync: boolean
+  hero_image_url?: string | null
+  hero_image_status?: string | null
+  hero_image_file_id?: string | null
 }): Promise<{
   content_id: string
   compliance_result: { status: string; notes?: string[] }
 }> {
-  const { brand_id, content_type, content, platform, audience, source, actor, runComplianceSync } = input
+  const {
+    brand_id, content_type, content, platform, audience, source, actor, runComplianceSync,
+    hero_image_url = null, hero_image_status = null, hero_image_file_id = null,
+  } = input
 
   // Guard: brand_id must be a TEXT slug, never a UUID
   if (UUID_PATTERN.test(brand_id)) {
@@ -52,6 +58,9 @@ export async function writeContentToQueue(input: {
       content,
       compliance_result: { status: 'pending', notes: [] },
       audience,
+      hero_image_url,
+      hero_image_status,
+      hero_image_file_id,
     })
     .select('id')
     .single()
