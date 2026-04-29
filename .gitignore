@@ -46,3 +46,5 @@ supabase/.temp/
 # Test suite
 tests/.env.test
 tests/results/*.log
+
+.vercel
