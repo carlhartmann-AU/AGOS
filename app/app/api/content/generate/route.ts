@@ -100,15 +100,44 @@ const PLATFORM_MAP: Record<string, string> = {
 }
 
 // ─── JSON extraction helper ───────────────────────────────────────────────────
+// Balanced-brace scanner: walks from the first '{' tracking depth and string
+// state. Stops the moment depth returns to zero — immune to trailing content
+// (prose, {{merge tokens}}, CSS braces) that a greedy regex would swallow.
 
 function extractJson(raw: string): Record<string, unknown> {
   const stripped = raw
     .replace(/```json\n?/g, '')
     .replace(/```\n?/g, '')
     .trim()
-  const match = stripped.match(/\{[\s\S]*\}/)
-  const jsonStr = match ? match[0] : stripped
-  return JSON.parse(jsonStr) as Record<string, unknown>
+
+  const start = stripped.indexOf('{')
+  if (start === -1) {
+    throw new SyntaxError('No JSON object found in Claude response')
+  }
+
+  let depth = 0
+  let inString = false
+  let prevChar = ''
+
+  for (let i = start; i < stripped.length; i++) {
+    const ch = stripped[i]
+
+    if (ch === '"' && prevChar !== '\\') {
+      inString = !inString
+    } else if (!inString) {
+      if (ch === '{') depth++
+      else if (ch === '}') {
+        depth--
+        if (depth === 0) {
+          return JSON.parse(stripped.slice(start, i + 1)) as Record<string, unknown>
+        }
+      }
+    }
+
+    prevChar = ch
+  }
+
+  throw new SyntaxError('Unbalanced JSON object in Claude response (missing closing brace)')
 }
 
 // ─── Route ────────────────────────────────────────────────────────────────────
