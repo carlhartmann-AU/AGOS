@@ -61,13 +61,19 @@ Output schema:
 }`,
 
   landing_page: `You generate Shopify landing pages for Plasmaide campaigns.
+CRITICAL JSON-SAFETY REQUIREMENT for body_html generation:
+All HTML attribute values MUST use SINGLE quotes, not double quotes. The body_html string is delivered inside a JSON object, and double-quoted HTML attributes break JSON parsing.
+Correct:    <div class='hero' style='padding:40px;'>
+Incorrect:  <div class="hero" style="padding:40px;">
+This applies to EVERY attribute on EVERY element — class, style, href, src, alt, id, data-*, aria-*, role, width, height, etc.
+Inside style attribute values, use double quotes for sub-strings if needed (e.g. style='font-family:"Times New Roman",serif;') — the outer single quote on the attribute is what matters.
 Guidelines: Self-contained HTML with inline CSS. No JavaScript. Mobile-first using CSS Grid/Flexbox and relative units. Structure: Hero (value prop) → Social proof (athletes, certifications) → Benefits (Pine Bark Extract specific) → Trust signals (Informed Sport, firstFlagX) → CTA. Shopify's theme handles chrome.
 IMPORTANT: Do NOT include any <img> tags or image references in the generated HTML. Do not embed images, reference placeholder filenames, or use markdown image syntax. All imagery is managed separately by the publishing workflow.
 Output schema:
 {
   "title": "Page title",
   "handle": "page-handle-slug",
-  "body_html": "<full page HTML with inline CSS — hero, social proof, benefits, trust signals, CTA sections — no images>",
+  "body_html": "<full page HTML with single-quoted attributes and inline CSS — hero, social proof, benefits, trust signals, CTA sections — no images>",
   "meta_title": "SEO title (max 60 chars)",
   "meta_description": "SEO description (max 155 chars)",
   "target_keywords": ["keyword1", "keyword2"]
