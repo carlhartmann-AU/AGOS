@@ -8,8 +8,10 @@
 
 import { createAdminClient } from '@/lib/supabase/admin'
 import { createBlogArticle, updateBlogArticle } from '@/lib/shopify/publish-blog'
+import { createShopifyPage, updateShopifyPage } from '@/lib/shopify/publish-page'
 import { fireN8nPublishWebhook } from './n8n-webhook'
 import type { BlogPublishInput } from '@/lib/shopify/publish-blog'
+import type { PagePublishInput } from '@/lib/shopify/publish-page'
 
 export class ShopifyPublishError extends Error {
   constructor(message: string, options?: { cause?: unknown }) {
@@ -85,14 +87,40 @@ export async function transitionContentStatus(input: {
     updates.approved_at = null
   }
 
-  // 4. Blog draft/go_live: Shopify publish runs BEFORE DB status update.
+  // 4. Direct Shopify publish runs BEFORE DB status update.
   //    On failure, status never transitions and the error surfaces to the caller.
   let shopify_resource_id: string | undefined
   const isBlogShopifyAction = current.content_type === 'blog' && (action === 'draft' || action === 'go_live')
+  const isLandingPageShopifyAction = current.content_type === 'landing_page' && action === 'go_live'
 
   if (isBlogShopifyAction) {
     try {
       shopify_resource_id = await tryShopifyPublish(supabase, content_id, brand_id, current, action as 'draft' | 'go_live')
+    } catch (err) {
+      if (err instanceof ShopifyPublishError) {
+        try {
+          await supabase.from('audit_log').insert({
+            brand_id,
+            agent: 'content_studio',
+            action: `content_${action}_failed`,
+            tokens_in: 0,
+            tokens_out: 0,
+            status: 'failure',
+            input_summary: `from=${fromStatus} action=${action} content_type=${current.content_type} actor=${actor_email}`.slice(0, 500),
+            output_summary: '',
+            error_message: (err as Error).message.slice(0, 500),
+          })
+        } catch (auditErr) {
+          console.warn('[queue-approver] failure audit_log write failed (non-fatal):', auditErr)
+        }
+      }
+      throw err
+    }
+  }
+
+  if (isLandingPageShopifyAction) {
+    try {
+      shopify_resource_id = await tryShopifyPagePublish(supabase, content_id, brand_id, current)
     } catch (err) {
       if (err instanceof ShopifyPublishError) {
         try {
@@ -236,6 +264,75 @@ async function tryShopifyPublish(
     console.error('[queue-approver] Direct Shopify publish failed:', err)
     throw new ShopifyPublishError(
       err instanceof Error ? err.message : 'Shopify publish failed',
+      { cause: err }
+    )
+  }
+}
+
+// Direct Shopify page publish. Throws ShopifyPublishError on any failure — no silent fallback.
+async function tryShopifyPagePublish(
+  supabase: ReturnType<typeof createAdminClient>,
+  content_id: string,
+  brand_id: string,
+  queueRow: Record<string, unknown>,
+): Promise<string> {
+  try {
+    const { data: conn } = await supabase
+      .from('shopify_connections')
+      .select('shop_domain, access_token, scopes')
+      .eq('brand_id', brand_id)
+      .neq('sync_status', 'disconnected')
+      .neq('access_token', '')
+      .order('connected_at', { ascending: false })
+      .limit(1)
+      .maybeSingle()
+
+    if (!conn) {
+      throw new ShopifyPublishError('No active Shopify connection found for this brand')
+    }
+
+    const scopes = (conn.scopes ?? '').split(',').map((s: string) => s.trim())
+    if (!scopes.includes('write_content')) {
+      throw new ShopifyPublishError('Shopify connection is missing write_content scope — reconnect via Settings → Integrations')
+    }
+
+    const content = (queueRow.content ?? {}) as Record<string, unknown>
+    const input: PagePublishInput = {
+      title: (content.title as string) ?? 'Untitled',
+      body_html: (content.body_html as string) ?? '',
+      handle: content.handle as string | undefined,
+      meta_title: (content.meta_title ?? content.seo_title) as string | undefined,
+      meta_description: (content.meta_description ?? content.seo_description) as string | undefined,
+    }
+
+    const existingPageId = content.shopify_page_id as string | undefined
+    let publishResult: { shopify_page_id: string; handle: string; url: string | null }
+
+    if (existingPageId) {
+      publishResult = await updateShopifyPage(conn.shop_domain, conn.access_token, existingPageId, input)
+    } else {
+      publishResult = await createShopifyPage(conn.shop_domain, conn.access_token, input)
+    }
+
+    // Write shopify IDs back to content field
+    await supabase
+      .from('content_queue')
+      .update({
+        content: {
+          ...content,
+          shopify_page_id: publishResult.shopify_page_id,
+          shopify_url: publishResult.url,
+        },
+        updated_at: new Date().toISOString(),
+      })
+      .eq('id', content_id)
+
+    return publishResult.shopify_page_id
+  } catch (err) {
+    if (err instanceof ShopifyPublishError) throw err
+    console.error('[queue-approver] Direct Shopify page publish failed:', err)
+    throw new ShopifyPublishError(
+      err instanceof Error ? err.message : 'Shopify page publish failed',
       { cause: err }
     )
   }

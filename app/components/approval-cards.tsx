@@ -284,6 +284,99 @@ export function EscalatedCard({ item, onPullBack }: PullBackProps) {
   )
 }
 
+// ─── LandingPageGoLiveCard ────────────────────────────────────────────────────
+// Shown for status='approved' + content_type='landing_page'.
+// TODO(Tier 1 Item 4): consolidate with BlogGoLiveCard via
+// shared <ApprovalCardBase> primitive when Item 4 ships.
+
+type LandingPageGoLiveProps = {
+  item: ContentQueueItem
+  onGoLive: () => Promise<void>
+  onReject: () => Promise<void>
+}
+
+export function LandingPageGoLiveCard({ item, onGoLive, onReject }: LandingPageGoLiveProps) {
+  const [actionLoading, setActionLoading] = useState<'golive' | 'reject' | null>(null)
+  const [error, setError] = useState<string | null>(null)
+
+  const content = (item.content ?? {}) as Record<string, unknown>
+  const title = (content.title ?? '(untitled)') as string
+
+  const stripHtml = (s: string) => s.replace(/<[^>]*>/g, ' ').replace(/\s+/g, ' ').trim()
+  const rawBody = (content.body_html ?? '') as string
+  const bodyPreview = rawBody ? stripHtml(rawBody).slice(0, 200) : null
+
+  async function handleGoLive() {
+    setActionLoading('golive')
+    setError(null)
+    try {
+      await onGoLive()
+    } catch {
+      setError('Failed to publish landing page. Please try again.')
+      setActionLoading(null)
+    }
+  }
+
+  async function handleReject() {
+    setActionLoading('reject')
+    setError(null)
+    try {
+      await onReject()
+    } catch {
+      setError('Failed to reject. Please try again.')
+      setActionLoading(null)
+    }
+  }
+
+  return (
+    <div className="bg-white rounded-lg border border-green-200 overflow-hidden">
+      <div className="px-5 py-3 bg-green-50 border-b border-green-200 flex items-center gap-2">
+        <span className="text-green-700 text-sm font-medium">✓ Approved — ready to publish</span>
+      </div>
+      <div className="px-5 py-4">
+        <div className="flex items-center gap-2 mb-2 flex-wrap">
+          <span className="text-xs font-medium bg-gray-100 text-gray-600 px-2 py-0.5 rounded">
+            Landing Page
+          </span>
+        </div>
+        <p className="text-sm font-medium text-gray-900 mb-1">{title}</p>
+        {bodyPreview && (
+          <p className="text-xs text-gray-500 line-clamp-2">{bodyPreview}…</p>
+        )}
+      </div>
+      {(item.approved_by || item.approved_at) && (
+        <div className="px-5 pb-3">
+          <p className="text-xs text-gray-400">
+            Approved by {item.approved_by ?? 'unknown'}
+            {item.approved_at ? ` · ${formatRelativeTime(item.approved_at)}` : ''}
+          </p>
+        </div>
+      )}
+      {error && (
+        <div className="px-5 pb-3">
+          <p className="text-xs text-red-600">{error}</p>
+        </div>
+      )}
+      <div className="px-5 py-3 border-t border-gray-100 flex items-center justify-end gap-2">
+        <button
+          onClick={handleReject}
+          disabled={!!actionLoading}
+          className="px-3 py-1.5 text-xs font-medium text-red-600 bg-white border border-red-200 rounded hover:bg-red-50 disabled:opacity-50 transition-colors"
+        >
+          {actionLoading === 'reject' ? 'Rejecting…' : 'Reject'}
+        </button>
+        <button
+          onClick={handleGoLive}
+          disabled={!!actionLoading}
+          className="px-3 py-1.5 text-xs font-medium text-white bg-green-600 rounded hover:bg-green-700 disabled:opacity-50 transition-colors"
+        >
+          {actionLoading === 'golive' ? 'Publishing…' : 'Publish landing page →'}
+        </button>
+      </div>
+    </div>
+  )
+}
+
 // ─── BlogGoLiveCard ───────────────────────────────────────────────────────────
 // Shown for status='approved' + content_type='blog'.
 // Draft exists in Shopify; this action publishes it live.

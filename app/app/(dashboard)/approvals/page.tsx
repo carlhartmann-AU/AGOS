@@ -6,6 +6,7 @@ import { useBrand } from '@/context/BrandContext'
 import {
   ContentApprovalCard,
   BlogGoLiveCard,
+  LandingPageGoLiveCard,
   PublishConfirmCard,
   PublishingCard,
   EscalatedCard,
@@ -224,6 +225,17 @@ export default function ApprovalsPage() {
         return (
           <CardErrorBoundary key={item.id} contentId={item.id}>
             <BlogGoLiveCard
+              item={item}
+              onGoLive={() => handleGoLive(item)}
+              onReject={() => handleReject(item)}
+            />
+          </CardErrorBoundary>
+        )
+      }
+      if (item.content_type === 'landing_page') {
+        return (
+          <CardErrorBoundary key={item.id} contentId={item.id}>
+            <LandingPageGoLiveCard
               item={item}
               onGoLive={() => handleGoLive(item)}
               onReject={() => handleReject(item)}
