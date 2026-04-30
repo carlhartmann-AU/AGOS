@@ -5,6 +5,9 @@ import { getAgentConfig } from '@/lib/llm/provider'
 import { writeContentToQueue } from '@/lib/content/queue-writer'
 import { maxTokensForContentType } from '@/lib/content/token-budgets'
 import { uploadFile, ShopifyFilesError } from '@/lib/shopify/files-client'
+import { resolveContentConfig } from '@/lib/config/brand-content-config'
+import { ConfigNotFoundError } from '@/lib/config/types'
+import type { ContentType, DotDigitalPlatformConfig } from '@/lib/config/types'
 
 export const maxDuration = 300
 export const dynamic = 'force-dynamic'
@@ -70,24 +73,10 @@ Output schema:
   "target_keywords": ["keyword1", "keyword2"]
 }`,
 
-  // TODO(Tier 1 Item 5): replace hardcoded "https://$UNSUB$" with per-brand-per-content-type
-  // config lookup when Klaviyo connector ships. Plasmaide → DotDigital → "https://$UNSUB$".
-  email: `You generate marketing emails for Plasmaide (sent via DotDigital).
-Guidelines: Clear subject line, compelling preview text. HTML email compatible with major clients. Plain text fallback required. Lead with value. One clear CTA per email. Personalisation tokens use {{FIRST_NAME}} format.
-UNSUBSCRIBE REQUIREMENTS (mandatory):
-- The HTML footer MUST include a single unsubscribe link with href set to exactly: https://$UNSUB$ — for example: <a href="https://$UNSUB$">Unsubscribe</a>. The https:// prefix is required — DotDigital's validator scans for URL-shaped hyperlinks and does not recognise a bare token without the prefix.
-- Do NOT use href="$UNSUB$" without the https:// prefix. Do NOT use {{UNSUBSCRIBE_URL}}, {{unsubscribe}}, {{PREFERENCES_URL}}, or any Liquid/Handlebars-style placeholder. The only valid value is https://$UNSUB$.
-- Do NOT include a separate preferences link. DotDigital handles preferences through its own unsubscribe flow.
-- The plain-text body_plain field must include the line: Unsubscribe: https://$UNSUB$
-- Personalisation merge tokens like {{FIRST_NAME}} are correct and must be preserved — only the unsubscribe/preferences placeholders must use the https://$UNSUB$ format.
-Output schema:
-{
-  "subject": "Email subject line",
-  "preview_text": "Preview text shown in inbox (max 90 chars)",
-  "body_html": "<full email HTML — inline CSS, responsive, major-client compatible>",
-  "body_plain": "Plain text version",
-  "target_keywords": ["keyword1", "keyword2"]
-}`,
+  // Email config-driven via brand_content_config (Tier 1 Item 5 Phase 2).
+  // unsubscribe_token and merge_token_format resolved per brand at request time.
+  // Plasmaide → DotDigital → "https://$UNSUB$".
+  // email guidance is built dynamically in the route handler — not in this static map.
 
   social_caption: `You generate social media captions for Plasmaide (primarily Instagram, also LinkedIn).
 Guidelines: Punchy and engaging. 150-220 chars for Instagram (excluding hashtags). Natural brand voice — not forced. Include an image brief describing the ideal visual. 5-10 relevant hashtags.
@@ -214,8 +203,8 @@ export async function POST(request: NextRequest) {
     return NextResponse.json({ error: 'Missing required field: topic' }, { status: 400, headers: NO_STORE })
   }
 
-  const typeGuidance = TYPE_GUIDANCE[content_type]
-  if (!typeGuidance) {
+  // email guidance is resolved from config below; all other types use the static map
+  if (!TYPE_GUIDANCE[content_type] && content_type !== 'email') {
     return NextResponse.json({ error: `Unsupported content_type: ${content_type}` }, { status: 400, headers: NO_STORE })
   }
 
@@ -342,6 +331,57 @@ export async function POST(request: NextRequest) {
     } catch (err) {
       console.warn('[content/generate] product fetch failed:', err)
     }
+  }
+
+  // ── Resolve per-brand config + build typeGuidance ────────────────────────────
+  let typeGuidance: string
+  if (content_type === 'email') {
+    let emailConfig: Awaited<ReturnType<typeof resolveContentConfig>>
+    try {
+      emailConfig = await resolveContentConfig(brand_id, content_type as ContentType)
+    } catch (err) {
+      const msg = err instanceof ConfigNotFoundError
+        ? err.message
+        : err instanceof Error ? err.message : String(err)
+      console.error('[content/generate] config resolution failed:', { brand_id, content_type, error: msg })
+      return NextResponse.json(
+        { error: `Content config not found: ${msg}` },
+        { status: 500, headers: NO_STORE },
+      )
+    }
+
+    if (emailConfig.destination_platform !== 'dotdigital') {
+      console.error('[content/generate] email config integrity error:', {
+        brand_id, expected: 'dotdigital', got: emailConfig.destination_platform,
+      })
+      return NextResponse.json(
+        { error: `Email config integrity error: expected 'dotdigital', got '${emailConfig.destination_platform}'` },
+        { status: 500, headers: NO_STORE },
+      )
+    }
+
+    const ep = emailConfig.platform_config as DotDigitalPlatformConfig & { destination_platform: 'dotdigital' }
+    const unsubToken = ep.unsubscribe_token
+    const mergeFormat = ep.merge_token_format
+
+    typeGuidance = `You generate marketing emails for Plasmaide (sent via DotDigital).
+Guidelines: Clear subject line, compelling preview text. HTML email compatible with major clients. Plain text fallback required. Lead with value. One clear CTA per email. Personalisation tokens use ${mergeFormat} format.
+UNSUBSCRIBE REQUIREMENTS (mandatory):
+- The HTML footer MUST include a single unsubscribe link with href set to exactly: ${unsubToken} — for example: <a href="${unsubToken}">Unsubscribe</a>.
+- Do NOT use any Liquid/Handlebars-style placeholder for the unsubscribe link. The only valid href value is ${unsubToken}.
+- Do NOT include a separate preferences link. DotDigital handles preferences through its own unsubscribe flow.
+- The plain-text body_plain field must include the line: Unsubscribe: ${unsubToken}
+- Personalisation merge tokens like {{FIRST_NAME}} are correct and must be preserved — only the unsubscribe placeholder must use the ${unsubToken} format.
+Output schema:
+{
+  "subject": "Email subject line",
+  "preview_text": "Preview text shown in inbox (max 90 chars)",
+  "body_html": "<full email HTML — inline CSS, responsive, major-client compatible>",
+  "body_plain": "Plain text version",
+  "target_keywords": ["keyword1", "keyword2"]
+}`
+  } else {
+    typeGuidance = TYPE_GUIDANCE[content_type]!
   }
 
   // ── Build system prompt ───────────────────────────────────────────────────────
